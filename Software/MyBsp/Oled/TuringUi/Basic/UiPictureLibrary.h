@@ -10,11 +10,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "UiCore.h"
 /* Data ------------------------------------------------------------------*/
-extern const uint8_t SettingIcon[128];
 extern const uint8_t ClockIcon[128];
-extern const uint8_t WaveIcon[128];
-extern const uint8_t MoreIcon[128];
-extern const uint8_t PowerIcon[128];
-extern const uint8_t MailIcon[128];
+extern const SVG PowerIcon[3];
 /* Functions------------------------------------------------------------------*/
 #endif

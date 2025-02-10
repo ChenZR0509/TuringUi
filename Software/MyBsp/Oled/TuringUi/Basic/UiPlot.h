@@ -10,7 +10,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "UiCore.h"
 #include <stdlib.h>
-#include <stdint.h>
 #include <string.h>
 #include <math.h>
 /* Data(对外接口)-----------------------------------------------------*/
@@ -28,10 +27,10 @@ typedef enum
 }ArrowMode;
 /*
  * @灰度阶定义：
- * 		|2|3|
- * 		|0|1|
+ * 		|4|8|
+ * 		|2|1|
  * @0：全填充0
- * @1：全填充1
+ * @F：全填充1
  * @5：
  * 		|1|0|
  * 		|0|1|
@@ -55,19 +54,49 @@ typedef enum
  * 		|1|0|1|1|
  * 		|1|1|0|1|
  * 		|0|1|1|1|
+ * @1：
+ * 		|0|0|
+ * 		|0|1|
+ * @2：
+ * 		|0|0|
+ * 		|1|0|
+ * @4：
+ * 		|1|0|
+ * 		|0|0|
+ * @8：
+ * 		|0|1|
+ * 		|0|0|
+ * @8421：
+ * 		|0|0|0|1|
+ * 		|0|1|0|0|
+ * 		|0|0|1|0|
+ * 		|1|0|0|0|
  * */
 typedef enum
 {
-	Fill0,	//填充0：灰度为0%
-	Fill1,	//填充1：灰度为100%
-	Fill5,	//交替填充0、1：灰度为50%
-	FillA,	//交替填充1、0：灰度为50%
+	Fill0,		//填充0：灰度为0%
+	Fill8421,	//灰度为25%：四种填充算法交替填充
+	Fill5,		//交替填充0、1：灰度为50%
+	FillEBD7,	//灰度为75%：四种75%灰度交替填充
+	FillF,		//填充1：灰度为100%
+	Fill1,		//灰度为25%
+	Fill2,		//灰度为25%
+	Fill4,		//灰度为25%
+	Fill8,		//灰度为25%
+	FillA,		//交替填充1、0：灰度为50%
 	FillB,  	//灰度为75%
 	Fill7,		//灰度为75%
 	FillE,		//灰度为75%
 	FillD,		//灰度为75%
-	FillEBD7,	//灰度为75%：四种75%灰度交替填充
 }FillMode;
+typedef enum
+{
+	AndCover,	//按位与运算
+	OrCover,	//按位或运算
+	NotCover,	//按位取反运算
+	XorCover,	//按位异或运算
+	XnorCover,	//按位同或运算
+}CoverMode;
 //-struct(结构体对外接口)
 typedef struct
 {
@@ -106,9 +135,12 @@ void PlotFillPolygon(Point2D pc, SSDBuffer buffer, FillMode mode, uint8_t Bounda
 void BezierLineInit(BezierLine *line, Point2D *controlPoints, uint8_t segment);
 void PlotBezierLine(BezierLine *line, SSDBuffer buffer, FillMode mode);
 void PlotBezierArrowLine(BezierLine *line, SSDBuffer buffer, FillMode mode);
+void Plot3BezierLine(Point3D* controlPoints, uint16_t segment, SSDBuffer buffer, FillMode mode);
 void PlotFillBlock(uint8_t bx, uint8_t by, SSDBuffer buffer, FillMode mode);
 void PlotFillScreen(SSDBuffer buffer, FillMode mode);
 void PlotCleanBlock(uint8_t bx, uint8_t by, SSDBuffer buffer);
 void PlotCleanBuffer(SSDBuffer buffer);
-void PlotCleanScreen();
+void PlotCleanScreen(void);
+void PlotScreenMaskCover(CoverMode mode);
+void PlotAreaMaskCover(Point2D sp, Point2D ep, CoverMode mode);
 #endif

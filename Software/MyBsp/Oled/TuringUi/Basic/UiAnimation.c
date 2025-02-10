@@ -7,6 +7,8 @@
  */
 /* Includes ------------------------------------------------------------------*/
 #include "UiAnimation.h"
+#include "UiPlot.h"
+#include <stdio.h>
 #include <math.h>
 /* 运动转换算法 ------------------------------------------------------------------*/
 /**
@@ -19,8 +21,8 @@
   */
 void OrtProject(Point3D p3, Point2D* p2, float scale, Point2D pc)
 {
-	p2->x = (uint8_t)(pc.x + p3.x * scale);
-	p2->y = (uint8_t)(pc.y - p3.y * scale);
+	p2->x = (UiType)(pc.x + p3.x * scale);
+	p2->y = (UiType)(pc.y - p3.y * scale);
 }
 /**
   *@ FunctionName: void PreProject(Point3D* p3, Point2D* p2, float scale, uint8_t depth, Point2D pc)
@@ -34,13 +36,13 @@ void PreProject(Point3D p3, Point2D* p2, float scale, uint8_t depth, Point2D pc)
 {
 	if(p3.z + depth != 0)
 	{
-		p2->x = (uint8_t)(pc.x + p3.x * scale / (p3.z + depth));
-		p2->y = (uint8_t)(pc.y - p3.y * scale / (p3.z + depth));
+		p2->x = (UiType)(pc.x + p3.x * scale / (p3.z + depth));
+		p2->y = (UiType)(pc.y - p3.y * scale / (p3.z + depth));
 	}
 	else
 	{
-		p2->x = (uint8_t)(pc.x);
-		p2->y = (uint8_t)(pc.y);
+		p2->x = (UiType)(pc.x);
+		p2->y = (UiType)(pc.y);
 	}
 }
 /**
@@ -134,16 +136,16 @@ void RotatePoint2D(Point2D* p2, RotateValue rot)
     float sinA = sin(rad);
 
     //将点平移到旋转中心
-    uint8_t tx = p2->x - rot.xc;
-    uint8_t ty = p2->y - rot.yc;
+    UiType tx = p2->x - rot.xc;
+    UiType ty = p2->y - rot.yc;
 
     //旋转计算
     float rx = tx * cosA - ty * sinA;
     float ry = tx * sinA + ty * cosA;
 
     //平移回原位置
-    p2->x = rot.xc + (int8_t)rx;
-    p2->y = rot.yc + (int8_t)ry;
+    p2->x = rot.xc + (UiType)rx;
+    p2->y = rot.yc + (UiType)ry;
 }
 /**
   *@ FunctionName: void RotatePoint3D(Point3D* p3,RotateValue rot)
@@ -333,4 +335,35 @@ void Animation(AnimSet* anis)
 	        *(anis->anie[i].Attribute) = anis->anie[i].scale->sPosition + (anis->anie[i].scale->ePosition - anis->anie[i].scale->sPosition) * y;
 		}
     }
+}
+/**
+  *@ FunctionName: void AnimationRoundTrip(AnimSet* anis,uint8_t num)
+  *@ Author: CzrTuringB
+  *@ Brief: 将动画设置为往返循环模式
+  *@ Time: Jan 10, 2025
+  *@ Requirement：
+  */
+void AnimBidirectionalLoop(AnimSet* anis,uint8_t num)
+{
+	if(anis->isFinish == True)
+	{
+		for(uint8_t i=0; i<num; i++)
+		{
+			float temp = anis->anie[i].scale->sPosition;
+			anis->anie[i].scale->sPosition = anis->anie[i].scale->ePosition;
+			anis->anie[i].scale->ePosition = temp;
+		}
+		anis->isFinish = False;
+	}
+}
+/**
+  *@ FunctionName: void AnimOneWayLoop(AnimSet* anis)
+  *@ Author: CzrTuringB
+  *@ Brief: 将动画设置为单项循环模式
+  *@ Time: Jan 10, 2025
+  *@ Requirement：
+  */
+void AnimOneWayLoop(AnimSet* anis)
+{
+	anis->isFinish = False;
 }

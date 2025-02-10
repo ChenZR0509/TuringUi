@@ -13,25 +13,29 @@
   */
 #ifndef SSD1306_H_
 #define SSD1306_H_
-/* Includes ------------------------------------------------------------------*/
+/* Includes" "------------------------------------------------------------------*/
 #include "i2c.h"
 #include "crc.h"
+#include "BspCore.h"
+/* Includes< >------------------------------------------------------------------*/
 /* Data(对外接口)-----------------------------------------------------*/
 //-define
-#define ScreenWidth		128			//屏幕宽度
-#define ScreenHeight	64			//屏幕高度
-#define PageNumber		8			//页数量
+#define ScreenWidth		128					//屏幕宽度
+#define ScreenHeight	64					//屏幕高度
+#define PageNumber		8					//页数量
+//-enum
 //-typedef(类型重命名)
 typedef uint8_t (*SSDBuffer)[ScreenWidth];  //SSDBuffer为指向128列数组的指针类型
-//-struct(结构体对外接口)
+//-struct
 typedef struct
 {
 	uint8_t disBuffer[PageNumber][ScreenWidth];		//屏幕显示缓冲数组
 	uint8_t maskBuffer[PageNumber][ScreenWidth];	//蒙版
 	Bool dataValid; 								//数据有效性判断变量
 }SsdPublicConfig;
+//-variable
 extern SsdPublicConfig* uiDevice;
-/* Functions(对外接口函数)------------------------------------------------------------------*/
+/* Functions Declare(对外接口函数)------------------------------------------------------------------*/
 void SSDInit(void);
 void SSDUpdateScreen(void);
 void SSDClean(void);

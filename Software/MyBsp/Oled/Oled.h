@@ -1,15 +1,15 @@
 /**
-  *@ FileName：UiInit.h
+  *@ FileName：Oled.h
   *@ Author：CzrTuringB
   *@ Brief：
-  *@ Time：Jan 15, 2025
+  *@ Time：Jan 14, 2025
   *@ Requirement：
   *@ Notes：
   */
-#ifndef __UIINIT_H
-#define __UIINIT_H
+#ifndef __OLED_H
+#define __OLED_H
 /* Includes" "------------------------------------------------------------------*/
-#include "../Basic/UiCore.h"
+#include "TuringUi/Basic/UiCore.h"
 /* Includes< >------------------------------------------------------------------*/
 /* Functions------------------------------------------------------------------*/
 /* Data(对外接口)-----------------------------------------------------*/
@@ -18,6 +18,7 @@
 //-typedef(类型重命名)
 //-struct
 //-variable
+extern xTaskHandle OledTaskHandle;
 /* Functions Declare(对外接口函数)------------------------------------------------------------------*/
-BspState UiInit(void);
+void OledApp(void);
 #endif

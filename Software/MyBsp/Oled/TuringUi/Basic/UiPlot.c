@@ -5,11 +5,13 @@
   *@ Time: Oct 30, 2024
   *@ Requirement：
   */
-/* Includes ------------------------------------------------------------------*/
+/* Includes" "------------------------------------------------------------------*/
 #include "UiPlot.h"
 #include "UiAnimation.h"
 #include "UiFontLibrary.h"
 #include "UiPictureLibrary.h"
+/* Includes< >------------------------------------------------------------------*/
+#include <ctype.h>
 /* Data ------------------------------------------------------------------*/
 /* Functions ------------------------------------------------------------------*/
 /**
@@ -18,21 +20,26 @@
   *@ Brief: 待绘制点有效性检测
   *@ Time: Dec 24, 2024
   *@ Requirement：
+  *@ Notes:
   *@ 	1、超出屏幕范围返回True;
   *@ 	2、没有超出屏幕范围返回False;
   */
 Bool EdgeDetect(Point2D p)
 {
+	//1、检测是否为负数
 	if(p.x < 0 || p.y < 0) return True;
-	if(p.x >= ScreenWidth || p.y > ScreenWidth) return True;
+	//2、检测是否大于屏幕高度和宽度
+	if(p.y >= ScreenHeight) return True;
+	if(p.x >= ScreenWidth) return True;
 	return False;
 }
 /**
-  *@ FunctionName: void PlotPoint(Point2D p,SSDBuffer buffer,FillMode mode)
+  *@ FunctionName: void PlotPoint(Point2D p, SSDBuffer buffer, FillMode mode)
   *@ Author: CzrTuringB
   *@ Brief: 根据P点x,y坐标绘制点
   *@ Time: Oct 30, 2024
   *@ Requirement：
+  *@ Notes:
   *@ 	1、坐标系：
   *@ 		y63
   *@		 |
@@ -41,18 +48,19 @@ Bool EdgeDetect(Point2D p)
   *@	   y0/x0-------------y127
   *@	2、buffer为一个指向屏幕显示缓冲区或蒙版缓冲区的二维数组的地址
   */
-void PlotPoint(Point2D p,SSDBuffer buffer,FillMode mode)
+void PlotPoint(Point2D p, SSDBuffer buffer, FillMode mode)
 {
-	//超出屏幕边界
+	//1、界限检测
 	if(EdgeDetect(p) == True)	return;
-	uint8_t index = p.y / 8;
-	uint8_t shift = p.y % 8;
+	//2、计算所在数组位置
+	UiType index = p.y / 8;
+	UiType shift = p.y % 8;
 	switch(mode)
 	{
 		case Fill0:
 			buffer[index][p.x] &= (~((1 << shift)));
 			break;
-		case Fill1:
+		case FillF:
 			buffer[index][p.x] |= (1 << shift);
 			break;
 		case Fill5:
@@ -85,23 +93,47 @@ void PlotPoint(Point2D p,SSDBuffer buffer,FillMode mode)
 			if(p.x%4 == 2)	buffer[index][p.x] |= (0xDD & (1 << shift));
 			if(p.x%4 == 3)	buffer[index][p.x] |= (0x77 & (1 << shift));
 			break;
+		case Fill1:
+			if(p.x%2 != 0 && p.y%2 == 0) buffer[index][p.x] |= (1 << shift);
+			else 						 buffer[index][p.x] &= (~((1 << shift)));
+			break;
+		case Fill2:
+			if(p.x%2 == 0 && p.y%2 == 0) buffer[index][p.x] |= (1 << shift);
+			else 						 buffer[index][p.x] &= (~((1 << shift)));
+			break;
+		case Fill4:
+			if(p.x%2 == 0 && p.y%2 != 0) buffer[index][p.x] |= (0xFF & (1 << shift));
+			else 						 buffer[index][p.x] &= (~((1 << shift)));
+			break;
+		case Fill8:
+			if(p.x%2 != 0 && p.y%2 != 0) buffer[index][p.x] |= (0xFF & (1 << shift));
+			else 						 buffer[index][p.x] &= (~((1 << shift)));
+			break;
+		case Fill8421:
+			if(p.x%4 == 0)	buffer[index][p.x] |= (0x11 & (1 << shift));
+			if(p.x%4 == 1)	buffer[index][p.x] |= (0x44 & (1 << shift));
+			if(p.x%4 == 2)	buffer[index][p.x] |= (0x22 & (1 << shift));
+			if(p.x%4 == 3)	buffer[index][p.x] |= (0x88 & (1 << shift));
+			break;
 	}
 }
 /**
-  *@ FunctionName: uint8_t GetPoint(uint8_t x, uint8_t y)
+  *@ FunctionName: uint8_t GetPoint(Point2D p, SSDBuffer buffer)
   *@ Author: CzrTuringB
   *@ Brief: 读取显存内容
   *@ Time: Dec 17, 2024
   *@ Requirement：
+  *@ Notes:
   *@ 	1、如果返回值非零则为1
   *@ 	2、如果返回值为零则为0
   */
-uint8_t GetPoint(Point2D p,SSDBuffer buffer)
+uint8_t GetPoint(Point2D p, SSDBuffer buffer)
 {
-	//超出屏幕边界
+	//1、是否超出界限
 	if(EdgeDetect(p) == True)	return 0;
-	uint8_t index = p.y / 8;
-	uint8_t shift = p.y % 8;
+	//2、读取缓存数组的值
+	UiType index = p.y / 8;
+	UiType shift = p.y % 8;
 	return (buffer[index][p.x] & (1 << shift)) ? 1 : 0;
 }
 /**
@@ -110,25 +142,23 @@ uint8_t GetPoint(Point2D p,SSDBuffer buffer)
   *@ Brief: 根据起始点\结束点坐标坐标绘制直线
   *@ Time: Oct 30, 2024
   *@ Requirement：
+  *@ Notes:
   */
 void PlotLine(Point2D p0, Point2D p1, SSDBuffer buffer,FillMode mode)
 {
-	//超出屏幕边界
-	if(EdgeDetect(p0) == True || EdgeDetect(p1) == True)	return;
-	//直线在x和y方向上的变化
-    int8_t dx = abs(p1.x - p0.x);
-    int8_t dy = abs(p1.y - p0.y);
-    //步进方向
-    int8_t sx = (p0.x < p1.x) ? 1 : -1;
-    int8_t sy = (p0.y < p1.y) ? 1 : -1;
-    //绘制直线、
+	//1、直线在x和y方向上的变化
+    UiType dx = abs(p1.x - p0.x);
+    UiType dy = abs(p1.y - p0.y);
+    //2、步进方向
+    UiType sx = (p0.x < p1.x) ? 1 : -1;
+    UiType sy = (p0.y < p1.y) ? 1 : -1;
+    //3、绘制直线
     if (dx > dy)
     {
-        //当 dx > dy 时，x 轴是主轴
-    	int8_t err = dx / 2;
+    	UiType err = dx / 2;
         while (p0.x != p1.x)
         {
-        	PlotPoint(p0,buffer,mode);
+        	PlotPoint(p0, buffer, mode);
             err -= dy;
             if (err < 0)
             {
@@ -140,11 +170,10 @@ void PlotLine(Point2D p0, Point2D p1, SSDBuffer buffer,FillMode mode)
     }
     else
     {
-        //当 dy > dx 时，y 轴是主轴
-    	int8_t err = dy / 2;
+    	UiType err = dy / 2;
         while (p0.y != p1.y)
         {
-        	PlotPoint(p0,buffer,mode);
+        	PlotPoint(p0, buffer, mode);
             err -= dx;
             if (err < 0)
             {
@@ -154,8 +183,8 @@ void PlotLine(Point2D p0, Point2D p1, SSDBuffer buffer,FillMode mode)
             p0.y += sy;
         }
     }
-    //绘制终点
-    PlotPoint(p1,buffer,mode);
+    //4、绘制终点
+    PlotPoint(p1, buffer, mode);
 }
 /**
   *@ FunctionName: void PlotDashedLine(Point2D p0, Point2D p1, SSDBuffer buffer, uint8_t dashLength, uint8_t gapLength, FillMode mode)
@@ -163,46 +192,34 @@ void PlotLine(Point2D p0, Point2D p1, SSDBuffer buffer,FillMode mode)
   *@ Brief: 根据起始点\结束点坐标坐标绘制虚线
   *@ Time: Oct 30, 2024
   *@ Requirement：
+  *@ Notes:
   *@ 	1、dashLength表示虚线线段长度
   *@ 	2、gapLength表示虚线间隔长度
   */
 void PlotDashedLine(Point2D p0, Point2D p1, SSDBuffer buffer, uint8_t dashLength, uint8_t gapLength, FillMode mode)
 {
-	//超出屏幕边界
-	if(EdgeDetect(p0) == True || EdgeDetect(p1) == True)	return;
-    // 计算直线在 x 和 y 方向上的变化
-    int16_t dx = abs(p1.x - p0.x);
-    int16_t dy = abs(p1.y - p0.y);
-
-    // 确定步进方向
-    int8_t sx = (p0.x < p1.x) ? 1 : -1;
-    int8_t sy = (p0.y < p1.y) ? 1 : -1;
-
-    // 初始化误差项
-    int16_t err = (dx > dy ? dx : -dy) / 2;
-    int16_t err2;
-
-    // 初始化虚线绘制状态
-    uint8_t segmentLength = dashLength + gapLength;  // 总周期长度
-    uint8_t stepCount = 0;                           // 当前步数计数
-
-    // 循环绘制虚线
+    //1、计算直线在 x 和 y 方向上的变化
+	UiType dx = abs(p1.x - p0.x);
+	UiType dy = abs(p1.y - p0.y);
+    //2、确定步进方向
+	UiType sx = (p0.x < p1.x) ? 1 : -1;
+	UiType sy = (p0.y < p1.y) ? 1 : -1;
+    //3、初始化误差项
+	UiType err = (dx > dy ? dx : -dy) / 2;
+	UiType err2;
+    //4、初始化虚线绘制状态
+	UiType segmentLength = dashLength + gapLength;  // 总周期长度
+	UiType stepCount = 0;                           // 当前步数计数
+    //5、循环绘制虚线
     while (1)
     {
-        // 判断当前步是否在虚线段内
         if (stepCount < dashLength)
         {
-            PlotPoint(p0,buffer,mode); // 绘制点
+            PlotPoint(p0,buffer,mode);
         }
-
-        // 更新步数计数
         stepCount = (stepCount + 1) % segmentLength;
-
-        // 到达终点时退出
         if (p0.x == p1.x && p0.y == p1.y)
             break;
-
-        // 更新误差和坐标
         err2 = err;
         if (err2 > -dx)
         {
@@ -222,47 +239,35 @@ void PlotDashedLine(Point2D p0, Point2D p1, SSDBuffer buffer, uint8_t dashLength
   *@ Brief: 根据起始点\结束点坐标坐标绘制箭头
   *@ Time: Oct 30, 2024
   *@ Requirement：
+  *@ Notes:
   */
 void PlotArrow(Point2D p0, Point2D p1, SSDBuffer buffer, ArrowMode aMode, FillMode fMode)
 {
-    // 如果起点或终点超出屏幕边界，直接返回
-    if (EdgeDetect(p0) == True || EdgeDetect(p1) == True) return;
-
-    // 内部函数：绘制箭头
+    //1、内部函数：绘制箭头
     void DrawArrow(Point2D base, Point2D tip)
     {
-        // 计算箭头方向的角度（弧度制）
         float angle = atan2(tip.y - base.y, tip.x - base.x);
-
-        // 计算箭头的两条边端点
-        int8_t x1 = tip.x + (int8_t)(3 * cos(angle + M_PI - 0.5)); // 箭头左边
-        int8_t y1 = tip.y + (int8_t)(3 * sin(angle + M_PI - 0.5));
-        int8_t x2 = tip.x + (int8_t)(3 * cos(angle + M_PI + 0.5)); // 箭头右边
-        int8_t y2 = tip.y + (int8_t)(3 * sin(angle + M_PI + 0.5));
-
-        // 绘制箭头的两条边
+        UiType x1 = tip.x + (int8_t)(3 * cos(angle + M_PI - 0.5)); // 箭头左边
+        UiType y1 = tip.y + (int8_t)(3 * sin(angle + M_PI - 0.5));
+        UiType x2 = tip.x + (int8_t)(3 * cos(angle + M_PI + 0.5)); // 箭头右边
+        UiType y2 = tip.y + (int8_t)(3 * sin(angle + M_PI + 0.5));
         PlotLine((Point2D){x1, y1}, tip, buffer, fMode);
         PlotLine((Point2D){x2, y2}, tip, buffer, fMode);
     }
-
-    // 根据箭头模式绘制箭头
+    //2、根据箭头模式绘制箭头
     switch (aMode)
     {
         case StartArrow:
-            // 在起点绘制箭头
             DrawArrow(p1, p0);
             break;
         case EndArrow:
-            // 在终点绘制箭头
             DrawArrow(p0, p1);
             break;
         case StaEndArrow:
-            // 在起点和终点都绘制箭头
             DrawArrow(p1, p0);
             DrawArrow(p0, p1);
             break;
         default:
-            // 如果是无效模式，不绘制箭头
             break;
     }
 }
@@ -275,12 +280,10 @@ void PlotArrow(Point2D p0, Point2D p1, SSDBuffer buffer, ArrowMode aMode, FillMo
   */
 void PlotCircle(Point2D pc, uint8_t r, SSDBuffer buffer, FillMode mode)
 {
-	uint8_t x = 0, y = r;
-	int8_t d = 1 - r;
-    // 使用八分之一圆对称绘制
+	UiType x = 0, y = r;
+	UiType d = 1 - r;
     while (x <= y)
     {
-        // 绘制八个对称点
     	PlotPoint((Point2D){pc.x + x, pc.y + y}, buffer, mode);
     	PlotPoint((Point2D){pc.x - x, pc.y + y}, buffer, mode);
     	PlotPoint((Point2D){pc.x + x, pc.y - y}, buffer, mode);
@@ -289,7 +292,6 @@ void PlotCircle(Point2D pc, uint8_t r, SSDBuffer buffer, FillMode mode)
     	PlotPoint((Point2D){pc.x - y, pc.y + x}, buffer, mode);
     	PlotPoint((Point2D){pc.x + y, pc.y - x}, buffer, mode);
     	PlotPoint((Point2D){pc.x - y, pc.y - x}, buffer, mode);
-        // 更新参数，确定下一个点
         if (d < 0)
         {
             d = d + 2 * x + 3;
@@ -311,17 +313,14 @@ void PlotCircle(Point2D pc, uint8_t r, SSDBuffer buffer, FillMode mode)
   */
 void PlotFillCircle(Point2D pc, uint8_t r, SSDBuffer buffer, FillMode mode)
 {
-	uint8_t x = 0, y = r;
-	int8_t d = 1 - r;
-
-    // 使用八分之一圆对称绘制
+	UiType x = 0, y = r;
+	UiType d = 1 - r;
     while (x <= y)
     {
     	PlotLine((Point2D){pc.x - x, pc.y + y}, (Point2D){pc.x + x, pc.y + y}, buffer, mode);
     	PlotLine((Point2D){pc.x - x, pc.y - y}, (Point2D){pc.x + x, pc.y - y}, buffer, mode);
     	PlotLine((Point2D){pc.x - y, pc.y + x}, (Point2D){pc.x + y, pc.y + x}, buffer, mode);
     	PlotLine((Point2D){pc.x - y, pc.y - x}, (Point2D){pc.x + y, pc.y - x}, buffer, mode);
-        // 更新参数，确定下一个点
         if (d < 0)
         {
             d = d + 2 * x + 3;
@@ -335,26 +334,24 @@ void PlotFillCircle(Point2D pc, uint8_t r, SSDBuffer buffer, FillMode mode)
     }
 }
 /**
-  *@ FunctionName: int8_t inArcRange(int8_t angle, int8_t startAngle, int8_t endAngle)
+  *@ FunctionName: uint8_t inArcRange(int8_t angle, int8_t startAngle, int8_t endAngle)
   *@ Author: CzrTuringB
   *@ Brief: 判断角度是否在范围内
   *@ Time: Oct 30, 2024
   *@ Requirement：
   */
-int8_t inArcRange(int16_t angle, int16_t startAngle, int16_t endAngle)
+uint8_t inArcRange(int16_t angle, int16_t startAngle, int16_t endAngle)
 {
-    // 将角度限制在 0~360
     angle = (angle + 360) % 360;
     startAngle = (startAngle + 360) % 360;
     endAngle = (endAngle + 360) % 360;
-    // 判断当前角度是否在指定范围内
     if (startAngle < endAngle)
     {
         return angle >= startAngle && angle <= endAngle;
     }
     else
     {
-        return angle >= startAngle || angle <= endAngle;  // 跨0度情况
+        return angle >= startAngle || angle <= endAngle;
     }
 }
 /**
@@ -367,12 +364,10 @@ int8_t inArcRange(int16_t angle, int16_t startAngle, int16_t endAngle)
   */
 void PlotArc(Point2D pc, uint8_t r, SSDBuffer buffer, int16_t startAngle, int16_t endAngle, FillMode mode)
 {
-	uint8_t x = 0, y = r;
-	int16_t d = 1 - r;
-
+	UiType x = 0, y = r;
+	UiType d = 1 - r;
     while (x <= y)
     {
-        // 计算当前点的八个对称点的角度
         int angles[8] =
         {
             (int16_t)(atan2(y, x) * 180 / M_PI),
@@ -384,7 +379,6 @@ void PlotArc(Point2D pc, uint8_t r, SSDBuffer buffer, int16_t startAngle, int16_
             (int16_t)(atan2(-x, y) * 180 / M_PI),
             (int16_t)(atan2(-x, -y) * 180 / M_PI)
         };
-        // 绘制每个符合角度条件的对称点
         if (inArcRange(angles[0], startAngle, endAngle)) PlotPoint((Point2D){pc.x + x, pc.y + y}, buffer, mode);
         if (inArcRange(angles[1], startAngle, endAngle)) PlotPoint((Point2D){pc.x - x, pc.y + y}, buffer, mode);
         if (inArcRange(angles[2], startAngle, endAngle)) PlotPoint((Point2D){pc.x + x, pc.y - y}, buffer, mode);
@@ -393,8 +387,6 @@ void PlotArc(Point2D pc, uint8_t r, SSDBuffer buffer, int16_t startAngle, int16_
         if (inArcRange(angles[5], startAngle, endAngle)) PlotPoint((Point2D){pc.x - y, pc.y + x}, buffer, mode);
         if (inArcRange(angles[6], startAngle, endAngle)) PlotPoint((Point2D){pc.x + y, pc.y - x}, buffer, mode);
         if (inArcRange(angles[7], startAngle, endAngle)) PlotPoint((Point2D){pc.x - y, pc.y - x}, buffer, mode);
-
-        // 更新决策参数
         if (d < 0)
         {
             d = d + 2 * x + 3;
@@ -416,50 +408,53 @@ void PlotArc(Point2D pc, uint8_t r, SSDBuffer buffer, int16_t startAngle, int16_
   */
 void PlotFillArc(Point2D pc, uint8_t r, SSDBuffer buffer, int16_t startAngle, int16_t endAngle, FillMode mode, uint8_t Boundry)
 {
-	uint8_t x, y;
+	UiType x, y;
 	if(Boundry == 1)
 	{
-		//绘制圆弧
 		PlotArc(pc, r, buffer, startAngle, endAngle, Fill1);
-	    //绘制圆边
 		PlotLine(pc, (Point2D){pc.x+r*cos(startAngle/180.0*M_PI), pc.y+r*sin(startAngle/180.0*M_PI)}, buffer, Fill1);
 		PlotLine(pc, (Point2D){pc.x+r*cos(endAngle/180.0*M_PI), pc.y+r*sin(endAngle/180.0*M_PI)}, buffer, Fill1);
 	}
 	else
 	{
-		//绘制圆弧
 		PlotArc(pc, r, buffer, startAngle, endAngle, Fill0);
-	    //绘制圆边
 		PlotLine(pc, (Point2D){pc.x+r*cos(startAngle/180.0*M_PI), pc.y+r*sin(startAngle/180.0*M_PI)}, buffer, Fill0);
 		PlotLine(pc, (Point2D){pc.x+r*cos(endAngle/180.0*M_PI), pc.y+r*sin(endAngle/180.0*M_PI)}, buffer, Fill0);
 	}
-    //计算递归原点
     x = pc.x + 0.5*r*cos((startAngle+endAngle)/360.0*M_PI);
     y = pc.y + 0.5*r*sin((startAngle+endAngle)/360.0*M_PI);
-    //递归填充
     PlotFillPolygon((Point2D){x, y}, buffer, mode, Boundry);
 }
+/**
+  *@ FunctionName: void PlotRingWithRoundedEnds(Point2D pc, uint8_t outerRadius, uint8_t innerRadius, SSDBuffer buffer, int16_t startAngle, int16_t endAngle, FillMode mode)
+  *@ Author: CzrTuringB
+  *@ Brief: 绘制圆角圆环
+  *@ Time: Jan 10, 2025
+  *@ Requirement：
+  */
 void PlotRingWithRoundedEnds(Point2D pc, uint8_t outerRadius, uint8_t innerRadius, SSDBuffer buffer, int16_t startAngle, int16_t endAngle, FillMode mode)
 {
-    uint8_t ringThickness = outerRadius - innerRadius;
-    uint8_t halfThickness = ringThickness / 2;
-    // 绘制外圆弧
+	UiType ringThickness = outerRadius - innerRadius;
+	UiType halfThickness = ringThickness / 2;
+    //绘制外圆弧
     PlotArc(pc, outerRadius, buffer, startAngle, endAngle, mode);
-    // 绘制内圆弧
+    //绘制内圆弧
     PlotArc(pc, innerRadius, buffer, startAngle, endAngle, mode);
-    // 起始半圆圆心计算
-    Point2D startCapCenter = {
+    //起始半圆圆心计算
+    Point2D startCapCenter =
+    {
         .x = pc.x + (int16_t)((outerRadius - halfThickness) * cos(startAngle * M_PI / 180)),
         .y = pc.y + (int16_t)((outerRadius - halfThickness) * sin(startAngle * M_PI / 180))
     };
-    // 结束半圆圆心计算
-    Point2D endCapCenter = {
+    //结束半圆圆心计算
+    Point2D endCapCenter =
+    {
         .x = pc.x + (int16_t)((outerRadius - halfThickness) * cos(endAngle * M_PI / 180)),
         .y = pc.y + (int16_t)((outerRadius - halfThickness) * sin(endAngle * M_PI / 180))
     };
-    // 绘制起始半圆
+    //绘制起始半圆
     PlotArc(startCapCenter, halfThickness, buffer, startAngle-180, startAngle, mode);
-    // 绘制结束半圆
+    //绘制结束半圆
     PlotArc(endCapCenter, halfThickness, buffer, endAngle, endAngle+180, mode);
 }
 /**
@@ -485,7 +480,7 @@ void PlotTriangle(Point2D* p, SSDBuffer buffer, FillMode mode)
 void PlotFillTriangle(Point2D* p, SSDBuffer buffer, FillMode mode)
 {
     // 获取边界框
-    int8_t minX = p[0].x, maxX = p[0].x, minY = p[0].y, maxY = p[0].y;
+	UiType minX = p[0].x, maxX = p[0].x, minY = p[0].y, maxY = p[0].y;
     for (uint8_t i = 1; i < 3; i++)  // 三角形只有三个顶点
     {
         if (p[i].x < minX) minX = p[i].x;
@@ -495,10 +490,10 @@ void PlotFillTriangle(Point2D* p, SSDBuffer buffer, FillMode mode)
     }
 
     // 扫描线填充
-    for (int8_t y = minY; y <= maxY; y++)
+    for (UiType y = minY; y <= maxY; y++)
     {
         // 存储交点
-        int8_t intersections[6], n = 0;  // 三角形最多3条边
+    	UiType intersections[6], n = 0;  // 三角形最多3条边
         // 计算与每条边的交点
         for (uint8_t i = 0; i < 3; i++)
         {
@@ -511,10 +506,8 @@ void PlotFillTriangle(Point2D* p, SSDBuffer buffer, FillMode mode)
                 // 如果边与扫描线重合（水平边），跳过
                 if (p1.y == p2.y)
                     continue;
-
                 // 计算交点 x 坐标，避免浮动误差
-                int16_t x = p1.x + (int16_t)(y - p1.y) * (p2.x - p1.x) / (p2.y - p1.y);
-
+                int x = p1.x + (int)(y - p1.y) * (p2.x - p1.x) / (p2.y - p1.y);
                 // 仅在 x 坐标在 minX 和 maxX 范围内时才记录交点
                 if (x >= minX && x <= maxX)
                 {
@@ -522,14 +515,14 @@ void PlotFillTriangle(Point2D* p, SSDBuffer buffer, FillMode mode)
                 }
             }
         }
-
         // 去重交点，避免重复交点的影响
-        for (uint8_t i = 0; i < n; i++) {
+        for (uint8_t i = 0; i < n; i++)
+        {
             for (uint8_t j = i + 1; j < n; j++)
             {
                 if (intersections[i] == intersections[j])
                 {
-                    // 将重复的交点移到数组的末尾并减少数量
+                    //将重复的交点移到数组的末尾并减少数量
                     for (uint8_t k = j; k < n - 1; k++)
                     {
                         intersections[k] = intersections[k + 1];
@@ -539,8 +532,7 @@ void PlotFillTriangle(Point2D* p, SSDBuffer buffer, FillMode mode)
                 }
             }
         }
-
-        // 排序交点，确保从左到右
+        //排序交点，确保从左到右
         for (uint8_t i = 0; i < n - 1; i++)
         {
             for (uint8_t j = i + 1; j < n; j++)
@@ -553,11 +545,9 @@ void PlotFillTriangle(Point2D* p, SSDBuffer buffer, FillMode mode)
                 }
             }
         }
-
-        // 在交点之间填充区域
+        //在交点之间填充区域
         for (uint8_t i = 0; i < n - 1; i += 2)
         {
-            // 填充交点之间的区域
             for (uint8_t x = intersections[i]; x <= intersections[i + 1]; x++)
             {
                 PlotPoint((Point2D){x, y}, buffer, mode);
@@ -621,8 +611,8 @@ void PlotFillRectangle(Point2D p0, uint8_t width, uint8_t height, SSDBuffer buff
   */
 void PlotFillQuadrilateral(Point2D* p, SSDBuffer buffer, FillMode mode)
 {
-    // 获取边界框
-    int8_t minX = p[0].x, maxX = p[0].x, minY = p[0].y, maxY = p[0].y;
+    //获取边界框
+	UiType minX = p[0].x, maxX = p[0].x, minY = p[0].y, maxY = p[0].y;
     for (uint8_t i = 1; i < 4; i++)
     {
         if (p[i].x < minX) minX = p[i].x;
@@ -630,18 +620,16 @@ void PlotFillQuadrilateral(Point2D* p, SSDBuffer buffer, FillMode mode)
         if (p[i].y < minY) minY = p[i].y;
         if (p[i].y > maxY) maxY = p[i].y;
     }
-
-    // 扫描线填充
-    for (int8_t y = minY; y <= maxY; y++)
+    //扫描线填充
+    for (UiType y = minY; y <= maxY; y++)
     {
         // 存储交点
-        int8_t intersections[8], n = 0;
+    	UiType intersections[8], n = 0;
         // 计算与每条边的交点
         for (uint8_t i = 0; i < 4; i++)
         {
             Point2D p1 = p[i];
             Point2D p2 = p[(i + 1) % 4];
-
             // 检查扫描线是否穿过当前边
             if (y >= fmin(p1.y, p2.y) && y <= fmax(p1.y, p2.y))
             {
@@ -651,7 +639,7 @@ void PlotFillQuadrilateral(Point2D* p, SSDBuffer buffer, FillMode mode)
                     continue;
                 }
                 // 计算交点 x 坐标，避免浮动误差
-                int16_t x = p1.x + (int16_t)(y - p1.y) * (p2.x - p1.x) / (p2.y - p1.y);
+                int x = p1.x + (int)(y - p1.y) * (p2.x - p1.x) / (p2.y - p1.y);
                 // 仅在 x 坐标在 minX 和 maxX 范围内时才记录交点
                 if (x >= minX && x <= maxX)
                 {
@@ -660,7 +648,8 @@ void PlotFillQuadrilateral(Point2D* p, SSDBuffer buffer, FillMode mode)
             }
         }
         // 去重交点，避免重复交点的影响
-        for (uint8_t i = 0; i < n; i++) {
+        for (uint8_t i = 0; i < n; i++)
+        {
             for (uint8_t j = i + 1; j < n; j++)
             {
                 if (intersections[i] == intersections[j])
@@ -713,7 +702,6 @@ void PlotArcRectangle(Point2D p0, uint8_t width, uint8_t height, uint8_t r, SSDB
 	PlotLine((Point2D){p0.x + r, p0.y + height}, (Point2D){p0.x + width - r, p0.y + height}, buffer, mode);  // 底边
 	PlotLine((Point2D){p0.x, p0.y + r}, (Point2D){p0.x,p0.y + height - r}, buffer, mode);  // 左边
 	PlotLine((Point2D){p0.x + width, p0.y + r}, (Point2D){p0.x + width, p0.y + height - r}, buffer, mode);  // 右边
-
 	PlotArc((Point2D){p0.x + r, p0.y + height - r}, r, buffer, 90, 180, mode);
 	PlotArc((Point2D){p0.x + r, p0.y + r}, r, buffer, 180, 270, mode);
 	PlotArc((Point2D){p0.x + width - r, p0.y + r}, r, buffer, 270, 360, mode);
@@ -730,15 +718,13 @@ void PlotPolygon(Point2D pc, uint8_t radius, uint8_t sides, SSDBuffer buffer, Fi
 {
 	//角度间隔
     double angleStep = 2 * M_PI / sides;
-    int x[sides], y[sides];
-
+    UiType x[sides], y[sides];
     // 计算每个顶点的坐标
     for (int i = 0; i < sides; i++)
     {
         x[i] = pc.x + (int)(radius * cos(i * angleStep + 0.5 * M_PI) + 0.5);  // 四舍五入为整数
         y[i] = pc.y + (int)(radius * sin(i * angleStep + 0.5 * M_PI) + 0.5);  // 四舍五入为整数
     }
-
     // 绘制多边形的边
     for (int i = 0; i < sides; i++)
     {
@@ -754,9 +740,8 @@ void PlotPolygon(Point2D pc, uint8_t radius, uint8_t sides, SSDBuffer buffer, Fi
   */
 void PlotWave(Point2D p0, uint8_t length, uint8_t amplitude, uint8_t frequency, SSDBuffer buffer, FillMode mode)
 {
-	int8_t prevX = p0.x, prevY = p0.y;  // 起点
-	uint8_t x, y;
-
+	UiType prevX = p0.x, prevY = p0.y;  // 起点
+	UiType x, y;
     // 逐步绘制波浪线
     for (x = p0.x; x <= p0.x + length; x++)
     {
@@ -779,8 +764,8 @@ void PlotWave(Point2D p0, uint8_t length, uint8_t amplitude, uint8_t frequency, 
 void PlotEllipse(Point2D p0, Point2D p1, Point2D p2, Point2D p3, SSDBuffer buffer, FillMode mode, Bool isDashed)
 {
     // 计算椭圆的中心点
-    int xc = (p0.x + p2.x) / 2;  // 长轴中心
-    int yc = (p1.y + p3.y) / 2;  // 短轴中心
+	UiType xc = (p0.x + p2.x) / 2;  // 长轴中心
+	UiType yc = (p1.y + p3.y) / 2;  // 短轴中心
 
     // 计算长轴和短轴的半径（直接计算两点间的距离）
     float a = sqrt((p2.x - p0.x) * (p2.x - p0.x) + (p2.y - p0.y) * (p2.y - p0.y)) / 2;  // 长轴半径
@@ -809,8 +794,8 @@ void PlotEllipse(Point2D p0, Point2D p1, Point2D p2, Point2D p3, SSDBuffer buffe
     int dx = y * two_a2, dy = x * two_b2;
 
     // 用来控制虚线间隔的计数器
-    int dashCount = 0;
-    const int dashInterval = 4;  // 每隔两个像素绘制一个点
+    UiType dashCount = 0;
+    const UiType dashInterval = 4;  // 每隔两个像素绘制一个点
 
     // 第一阶段
     p = (b2 - a2 * b + 0.25 * a2);  // 初始决策参数
@@ -871,7 +856,6 @@ void PlotEllipse(Point2D p0, Point2D p1, Point2D p2, Point2D p3, SSDBuffer buffe
             yRot = (int)(yc - x * sinTheta - y * cosTheta);
             PlotPoint((Point2D){xRot, yRot}, buffer, mode);
         }
-
         dashCount++;  // 增加计数器
         y--;
         dx -= two_a2;
@@ -888,6 +872,126 @@ void PlotEllipse(Point2D p0, Point2D p1, Point2D p2, Point2D p3, SSDBuffer buffe
     }
 }
 /**
+  *@ FunctionName: void PlotCharC6x8(Point2D p0, uint8_t chr, SSDBuffer buffer)
+  *@ Author: CzrTuringB
+  *@ Brief: 绘制C6x8字符
+  *@ Time: Jan 15, 2025
+  *@ Requirement：
+  *@ Notes:
+  */
+void PlotCharC6x8(Point2D p0, uint8_t chr, SSDBuffer buffer)
+{
+	uint8_t fontIndex = chr - ' ';
+	UiType yShift = p0.y%8;
+	UiType yIndex = p0.y/8;
+	for(uint8_t i=0; i<6; i++)
+	{
+		if(p0.x >= 0 && p0.x < ScreenWidth)
+		{
+			if(uiDevice->dataValid == False)
+			{
+				if(yIndex >= 0 && yIndex < PageNumber)
+				{
+					buffer[yIndex][p0.x] |= (Font6x8[fontIndex * 6 + i] << yShift);
+				}
+				if(yIndex+1 >= 0 && yIndex+1 < PageNumber)
+				{
+					buffer[yIndex+1][p0.x] |= (Font6x8[fontIndex * 6 + i] >> (7 - yShift));
+				}
+			}
+			else
+			{
+				if(yIndex >= 0 && yIndex < PageNumber)
+				{
+					buffer[yIndex][p0.x] = ~((Font6x8[fontIndex * 6 + i] << yShift)
+							| (~buffer[yIndex][p0.x]));
+				}
+				if(yIndex+1 >= 0 && yIndex+1 < PageNumber)
+				{
+					buffer[yIndex+1][p0.x] = ~((Font6x8[fontIndex * 6 + i] >> (7 - yShift))
+							| (~buffer[yIndex+1][p0.x]));
+				}
+			}
+		}
+		p0.x++;
+	}
+}
+/**
+  *@ FunctionName: void PlotCharC8x16(Point2D p0, uint8_t chr, SSDBuffer buffer)
+  *@ Author: CzrTuringB
+  *@ Brief: 绘制C8x16字符
+  *@ Time: Jan 15, 2025
+  *@ Requirement：
+  *@ Notes:
+  */
+void PlotCharC8x16(Point2D p0, uint8_t chr, SSDBuffer buffer)
+{
+	uint8_t fontIndex = chr - ' ';
+	UiType yShift = p0.y%8;
+	UiType yIndex = p0.y/8;
+	for(uint8_t i=0; i<16; i++)
+	{
+		if(p0.x >= 0 && p0.x < ScreenWidth)
+		{
+			if(uiDevice->dataValid == False)
+			{
+				if (i < 8)
+				{
+					if(yIndex+2 >= 0 && yIndex+2 < PageNumber)
+					{
+						buffer[yIndex+2][p0.x] |= (Font8x16[fontIndex * 16 + i] >> (7 - yShift));
+					}
+					if(yIndex+1 >= 0 && yIndex+1 < PageNumber)
+					{
+						buffer[yIndex+1][p0.x] |= (Font8x16[fontIndex * 16 + i] << yShift);
+					}
+				}
+				else
+				{
+					if(yIndex+1 >= 0 && yIndex+1 < PageNumber)
+					{
+						buffer[yIndex+1][p0.x-8] |= (Font8x16[fontIndex * 16 + i] >> (7 - yShift));
+					}
+					if(yIndex >= 0 && yIndex < PageNumber)
+					{
+						buffer[yIndex][p0.x-8] |= (Font8x16[fontIndex * 16 + i] << yShift);
+					}
+				}
+			}
+			else
+			{
+				if (i < 8)
+				{
+					if(yIndex+2 >= 0 && yIndex+2 < PageNumber)
+					{
+						buffer[yIndex+2][p0.x] = ~((Font8x16[fontIndex * 16 + i] >> (7 - yShift))
+								| (~buffer[yIndex+2][p0.x]));
+					}
+					if(yIndex+1 >= 0 && yIndex+1 < PageNumber)
+					{
+						buffer[yIndex+1][p0.x] = ~((Font8x16[fontIndex * 16 + i] << yShift)
+								| (~buffer[yIndex+1][p0.x]));
+					}
+				}
+				else
+				{
+					if(yIndex+1 >= 0 && yIndex+1 < PageNumber)
+					{
+						buffer[yIndex+1][p0.x-8] = ~((Font8x16[fontIndex * 16 + i]
+								>> (7 - yShift)) | (~buffer[yIndex+1][p0.x-8]));
+					}
+					if(yIndex >= 0 && yIndex < PageNumber)
+					{
+						buffer[yIndex][p0.x-8] = ~((Font8x16[fontIndex * 16 + i] << yShift)
+								| (~buffer[yIndex][p0.x-8]));
+					}
+				}
+			}
+		}
+		p0.x++;
+	}
+}
+/**
   *@ FunctionName: void PlotChar(Point2D p0, uint8_t chr, FontSize charSize, SSDBuffer buffer)
   *@ Author: CzrTuringB
   *@ Brief: 绘制字符
@@ -897,66 +1001,13 @@ void PlotEllipse(Point2D p0, Point2D p1, Point2D p2, Point2D p3, SSDBuffer buffe
   */
 void PlotChar(Point2D p0, uint8_t chr, FontSize charSize, SSDBuffer buffer)
 {
-	uint8_t fontIndex = chr - ' ';
-	uint8_t yShift = p0.y%8;
-	uint8_t yIndex = p0.y/8;
-
-	if(charSize == C8x16)
+	switch(charSize)
 	{
-		//绘制大字体
-		for(uint8_t i=0; i<16; i++)
-		{
-			if(uiDevice->dataValid == False)
-			{
-				if (i < 8)
-				{
-					buffer[yIndex+2][p0.x] |= (Font8x16[fontIndex * 16 + i] >> (7 - yShift));
-					buffer[yIndex+1][p0.x] |= (Font8x16[fontIndex * 16 + i] << yShift);
-				}
-				else
-				{
-					buffer[yIndex+1][p0.x-8] |= (Font8x16[fontIndex * 16 + i] >> (7 - yShift));
-					buffer[yIndex][p0.x-8] |= (Font8x16[fontIndex * 16 + i] << yShift);
-				}
-			}
-			else
-			{
-				if (i < 8)
-				{
-					buffer[yIndex+2][p0.x] = ~((Font8x16[fontIndex * 16 + i] >> (7 - yShift))
-							| (~buffer[yIndex+2][p0.x]));
-					buffer[yIndex+1][p0.x] = ~((Font8x16[fontIndex * 16 + i] << yShift)
-							| (~buffer[yIndex+1][p0.x]));
-				}
-				else
-				{
-					buffer[yIndex+1][p0.x-8] = ~((Font8x16[fontIndex * 16 + i]
-							>> (7 - yShift)) | (~buffer[yIndex+1][p0.x-8]));
-					buffer[yIndex][p0.x-8] = ~((Font8x16[fontIndex * 16 + i] << yShift)
-							| (~buffer[yIndex][p0.x-8]));
-				}
-			}
-			p0.x++;
-		}
-	}
-	else
-	{
-		for(uint8_t i=0; i<6; i++)
-		{
-			if(uiDevice->dataValid == False)
-			{
-				buffer[yIndex+1][p0.x] |= (Font6x8[fontIndex * 6 + i] >> (7 - yShift));
-				buffer[yIndex][p0.x] |= (Font6x8[fontIndex * 6 + i] << yShift);
-			}
-			else
-			{
-				buffer[yIndex+1][p0.x] = ~((Font6x8[fontIndex * 6 + i] >> (7 - yShift))
-						| (~buffer[yIndex+1][p0.x]));
-				buffer[yIndex][p0.x] = ~((Font6x8[fontIndex * 6 + i] << yShift)
-						| (~buffer[yIndex][p0.x]));
-			}
-			p0.x++;
-		}
+		case C6x8:
+			PlotCharC6x8(p0, chr, buffer);
+			break;
+		case C8x16:
+			PlotCharC8x16(p0, chr, buffer);
 	}
 }
 /**
@@ -988,32 +1039,44 @@ void PlotString(Point2D p0, const char* str, FontSize charSize, SSDBuffer buffer
   *@ Brief: 绘制BMP图像
   *@ Time: Nov 1, 2024
   *@ Requirement：
-  *@ 1、(x,y)即为图像左下角点坐标
+  *@ 	1、(x,y)即为图像左下角点坐标
+  *@ 	2、图像数据在生成时尺寸最好能被8整除(即使不能被8整除也会在取模软件中进行补充)
   */
-void PlotBMP(Point2D p0,uint8_t width,uint8_t height,const uint8_t* picture, SSDBuffer buffer)
+void PlotBMP(Point2D p0, uint8_t width, uint8_t height, const uint8_t* picture, SSDBuffer buffer)
 {
-	uint8_t pageStart = p0.y/8;
-	uint8_t pageEnd   = (p0.y+height)/8;
-	uint8_t shift = p0.y%8;
-
-	for(uint8_t i=p0.x; i<p0.x+width; i++)
-	{
-		for(uint8_t j=pageStart; j<pageEnd;j++)
-		{
-			if(uiDevice->dataValid == False)
-			{
-				buffer[j+1][i] |= (picture[i-p0.x+(pageEnd-j-1)*width] >> (7 - shift));
-				buffer[j][i] |= (picture[i-p0.x+(pageEnd-j-1)*width] << shift);
-			}
-			else
-			{
-				buffer[j+1][i] = ~((picture[i-p0.x+(pageEnd-j-1)*width] >> (7 - shift))
-						| (~buffer[j+1][i]));
-				buffer[j][i] = ~((picture[i-p0.x+(pageEnd-j-1)*width] << shift)
-						| (~buffer[j][i]));
-			}
-		}
-	}
+	//1、计算索引位置
+    UiType pageStart = p0.y / 8;
+    UiType pageEnd = (p0.y + height - 1) / 8;
+    UiType shift = p0.y % 8;
+    //2、遍历每列
+    for (UiType i = p0.x; i < p0.x + width; i++)
+    {
+        if (i >= 0 && i < ScreenWidth)
+        {
+            for (UiType j = pageStart; j <= pageEnd; j++)
+            {
+                uint8_t pictureData = 0;
+                //从图像数据中取一个字节
+                if (j < pageEnd)
+                    pictureData = picture[(i - p0.x) + (pageEnd - j - 1) * width];
+                //根据数据有效性进行绘制
+                if (uiDevice->dataValid == False)
+                {
+                    if (j + 1 < PageNumber)
+                        buffer[j + 1][i] |= (pictureData >> (8 - shift));
+                    if (j < PageNumber)
+                        buffer[j][i] |= (pictureData << shift);
+                }
+                else
+                {
+                    if (j + 1 < PageNumber)
+                        buffer[j + 1][i] = ~((pictureData >> (8 - shift)) | (~buffer[j + 1][i]));
+                    if (j < PageNumber)
+                        buffer[j][i] = ~((pictureData << shift) | (~buffer[j][i]));
+                }
+            }
+        }
+    }
 }
 /**
   *@ FunctionName: void Plot2Axes(Point2D pc, uint8_t xLength, uint8_t yLength, float angle, SSDBuffer buffer, FillMode mode)
@@ -1025,8 +1088,8 @@ void PlotBMP(Point2D p0,uint8_t width,uint8_t height,const uint8_t* picture, SSD
 void Plot2Axes(Point2D pc, uint8_t xLength, uint8_t yLength, float angle, SSDBuffer buffer, FillMode mode)
 {
 	RotateValue rot = {0,0,angle,pc.x,pc.y,0};
-	uint8_t y  = pc.y + yLength;
-	uint8_t x  = pc.x + xLength;
+	UiType y  = pc.y + yLength;
+	UiType x  = pc.x + xLength;
 	Point2D px = (Point2D){x,pc.y};
 	Point2D py = (Point2D){pc.x,y};
 	RotatePoint2D(&px, rot);
@@ -1052,14 +1115,13 @@ void PlotRoseCurve(Point2D pc, float a, float k, uint16_t steps, SSDBuffer buffe
     float theta, r;
     Point2D p;
     float stepSize = 2 * M_PI / steps; // 每一步的角度增量
-
     for (uint16_t i = 0; i <= steps; i++)
     {
         theta = i * stepSize;       // 当前角度
         r = a * cos(k * theta);     // 计算极径，可以改为 sin(k * theta) 看效果
         // 将极坐标转换为笛卡尔坐标
-        p.x = (uint8_t)(pc.x + r * cos(theta));
-        p.y = (uint8_t)(pc.y + r * sin(theta));
+        p.x = (UiType)(pc.x + r * cos(theta));
+        p.y = (UiType)(pc.y + r * sin(theta));
         // 绘制点
         PlotPoint(p, buffer, mode);
     }
@@ -1116,8 +1178,8 @@ void PlotButterflyCurve(Point2D pc, uint16_t steps, float scale, SSDBuffer buffe
         x *= scale;  // x坐标放大/缩小
         y *= scale;  // y坐标放大/缩小
         // 将坐标映射到屏幕坐标范围
-        p.x = (uint8_t)(pc.x + x);  // x坐标
-        p.y = (uint8_t)(pc.y - y);  // y坐标需要反转，以适应屏幕坐标系
+        p.x = (UiType)(pc.x + x);  // x坐标
+        p.y = (UiType)(pc.y - y);  // y坐标需要反转，以适应屏幕坐标系
         // 绘制点
         PlotPoint(p, buffer, mode);
     }
@@ -1152,8 +1214,8 @@ void PlotStarCurve(Point2D pc, uint16_t steps, float a, float b, float k, float 
         y *= scale;  // y坐标放大/缩小
 
         // 将坐标映射到屏幕坐标范围（128x64）
-        p.x = (uint8_t)(pc.x + x);  // x坐标
-        p.y = (uint8_t)(pc.y - y);  // y坐标需要反转，以适应屏幕坐标系
+        p.x = (UiType)(pc.x + x);  // x坐标
+        p.y = (UiType)(pc.y - y);  // y坐标需要反转，以适应屏幕坐标系
         // 绘制点
         PlotPoint(p, buffer, mode);
     }
@@ -1174,7 +1236,7 @@ void PlotFillPolygon(Point2D pc, SSDBuffer buffer, FillMode mode, uint8_t Bounda
     // 定义位操作宏
     #define IS_FILLED(p) (filledPoints[(p.y) / 8][(p.x)] & (1 << ((p.y) % 8)))
     #define MARK_FILLED(p) (filledPoints[(p.y) / 8][(p.x)] |= (1 << ((p.y) % 8)))
-    #define IS_VALID(p) ((p.x) < 128 && (p.y) < 64)
+    #define IS_VALID(p) ((p.x) < ScreenWidth && (p.y) < ScreenHeight)
 
     // 定义递归函数
     void Fill(Point2D p, SSDBuffer buffer)
@@ -1214,7 +1276,7 @@ void PlotFillPolygon(Point2D pc, SSDBuffer buffer, FillMode mode, uint8_t Bounda
 void BezierLineInit(BezierLine *line, Point2D *controlPoints, uint8_t segment)
 {
 	line->segment = segment;
-	for (int i = 0; i < 4; i++)
+	for (UiType i = 0; i < 4; i++)
 	{
 		line->controlPoints[i] = controlPoints[i];
 	}
@@ -1286,12 +1348,34 @@ void PlotBezierArrowLine(BezierLine *line, SSDBuffer buffer, FillMode mode)
 			currentPoint.x - prevPoint.x);
 
 	//计算箭头的两个端点
-	uint8_t x = currentPoint.x + (int8_t) (6 * cos(angle + M_PI - 0.5));
-	uint8_t y = currentPoint.y + (int8_t) (6 * sin(angle + M_PI - 0.5));
+	UiType x = currentPoint.x + (int8_t) (6 * cos(angle + M_PI - 0.5));
+	UiType y = currentPoint.y + (int8_t) (6 * sin(angle + M_PI - 0.5));
 	PlotLine(currentPoint, (Point2D){x, y}, buffer, mode);
 	x = currentPoint.x + (int8_t) (6 * cos(angle + M_PI + 0.5));
 	y = currentPoint.y + (int8_t) (6 * sin(angle + M_PI + 0.5));
 	PlotLine(currentPoint, (Point2D){x, y}, buffer, mode);
+}
+void Plot3BezierLine(Point3D* controlPoints, uint16_t segment, SSDBuffer buffer, FillMode mode)
+{
+    Point2D prevPoint = (Point2D){(UiType)controlPoints[0].x,(UiType)controlPoints[0].y};
+    Point2D currentPoint;
+    for (uint16_t i = 1; i <= segment; i++)
+    {
+        float t = (float) i / segment;
+        float u = 1 - t;
+        // 使用贝塞尔曲线的公式计算曲线上的点
+        currentPoint.x = (UiType)((u * u * u * controlPoints[0].x) +
+                         (3 * u * u * t * controlPoints[1].x) +
+                         (3 * u * t * t * controlPoints[2].x) +
+                         (t * t * t * controlPoints[3].x));
+        currentPoint.y = (UiType)((u * u * u * controlPoints[0].y) +
+                         (3 * u * u * t * controlPoints[1].y) +
+                         (3 * u * t * t * controlPoints[2].y) +
+                         (t * t * t * controlPoints[3].y));
+        // 绘制两点之间的线段
+        PlotLine(prevPoint, currentPoint, buffer, mode);
+        prevPoint = currentPoint;
+    }
 }
 /**
   *@ FunctionName: void PlotFillBlock(uint8_t bx, uint8_t by, SSDBuffer buffer, FillMode mode)
@@ -1309,7 +1393,7 @@ void PlotFillBlock(uint8_t bx, uint8_t by, SSDBuffer buffer, FillMode mode)
 			case Fill0:
 				buffer[by][j] = 0;
 				break;
-			case Fill1:
+			case FillF:
 				buffer[by][j] = 0xFF;
 				break;
 			case Fill5:
@@ -1342,6 +1426,28 @@ void PlotFillBlock(uint8_t bx, uint8_t by, SSDBuffer buffer, FillMode mode)
 				if(j%4 == 2)	buffer[by][j] = 0xDD;
 				if(j%4 == 3)	buffer[by][j] = 0x77;
 				break;
+			case Fill1:
+				if(j%2 != 0)  	buffer[by][j] = 0x55;
+				else			buffer[by][j] = 0x00;
+				break;
+			case Fill2:
+				if(j%2 == 0) 	buffer[by][j] = 0x55;
+				else			buffer[by][j] = 0x00;
+				break;
+			case Fill4:
+				if(j%2 == 0) 	buffer[by][j] = 0xAA;
+				else			buffer[by][j] = 0x00;
+				break;
+			case Fill8:
+				if(j%2 != 0) 	buffer[by][j] = 0xAA;
+				else			buffer[by][j] = 0x00;
+				break;
+			case Fill8421:
+				if(j%4 == 0)	buffer[by][j] = 0x11;
+				if(j%4 == 1)	buffer[by][j] = 0x44;
+				if(j%4 == 2)	buffer[by][j] = 0x22;
+				if(j%4 == 3)	buffer[by][j] = 0x88;
+				break;
 		}
 	}
 }
@@ -1355,16 +1461,16 @@ void PlotFillBlock(uint8_t bx, uint8_t by, SSDBuffer buffer, FillMode mode)
   */
 void PlotFillScreen(SSDBuffer buffer, FillMode mode)
 {
-	for(uint8_t i=0;i<PageNumber;i++)
+	for(UiType i=0; i<PageNumber; i++)
 	{
-		for(uint8_t j=0;j<ScreenWidth;j++)
+		for(uUiType j=0; j<ScreenWidth; j++)
 		{
 			switch(mode)
 			{
 				case Fill0:
 					buffer[i][j] = 0x00;
 					break;
-				case Fill1:
+				case FillF:
 					buffer[i][j] = 0xFF;
 					break;
 				case Fill5:
@@ -1397,6 +1503,28 @@ void PlotFillScreen(SSDBuffer buffer, FillMode mode)
 					if(j%4 == 2)	buffer[i][j] = 0xDD;
 					if(j%4 == 3)	buffer[i][j] = 0x77;
 					break;
+				case Fill1:
+					if(j%2 != 0)  	buffer[i][j] = 0x55;
+					else			buffer[i][j] = 0x00;
+					break;
+				case Fill2:
+					if(j%2 == 0) 	buffer[i][j] = 0x55;
+					else			buffer[i][j] = 0x00;
+					break;
+				case Fill4:
+					if(j%2 == 0) 	buffer[i][j] = 0xAA;
+					else			buffer[i][j] = 0x00;
+					break;
+				case Fill8:
+					if(j%2 != 0) 	buffer[i][j] = 0xAA;
+					else			buffer[i][j] = 0x00;
+					break;
+				case Fill8421:
+					if(j%4 == 0)	buffer[i][j] = 0x11;
+					if(j%4 == 1)	buffer[i][j] = 0x44;
+					if(j%4 == 2)	buffer[i][j] = 0x22;
+					if(j%4 == 3)	buffer[i][j] = 0x88;
+					break;
 			}
 		}
 	}
@@ -1404,7 +1532,7 @@ void PlotFillScreen(SSDBuffer buffer, FillMode mode)
 /**
   *@ FunctionName: void PlotCleanBlock(uint8_t bx, uint8_t by, SSDBuffer buffer)
   *@ Author: CzrTuringB
-  *@ Brief: 清空整个缓冲区
+  *@ Brief: 清空块
   *@ Time: Jan 2, 2025
   *@ Requirement：
   */
@@ -1412,7 +1540,7 @@ void PlotCleanBlock(uint8_t bx, uint8_t by, SSDBuffer buffer)
 {
 	if(uiDevice->dataValid == True)
 	{
-		PlotFillBlock(bx, by, buffer, Fill1);
+		PlotFillBlock(bx, by, buffer, FillF);
 	}
 	else
 	{
@@ -1430,7 +1558,7 @@ void PlotCleanBuffer(SSDBuffer buffer)
 {
 	if(uiDevice->dataValid == True)
 	{
-		PlotFillScreen(buffer, Fill1);
+		PlotFillScreen(buffer, FillF);
 	}
 	else
 	{
@@ -1448,4 +1576,138 @@ void PlotCleanScreen()
 {
 	SSDClean();
 	SSDUpdateScreen();
+}
+/**
+  *@ FunctionName: void PlotScreenMaskCover(CoverMode mode)
+  *@ Author: CzrTuringB
+  *@ Brief: 整屏蒙版操作
+  *@ Time: Jan 10, 2025
+  *@ Requirement：
+  */
+void PlotScreenMaskCover(CoverMode mode)
+{
+	for(UiType i=0;i<PageNumber;i++)
+	{
+		for(uUiType j=0;j<ScreenWidth;j++)
+		{
+			switch(mode)
+			{
+				case AndCover:
+					uiDevice->disBuffer[i][j] &= uiDevice->maskBuffer[i][j];
+					break;
+				case OrCover:
+					uiDevice->disBuffer[i][j] |= uiDevice->maskBuffer[i][j];
+					break;
+				case NotCover:
+					uiDevice->disBuffer[i][j] = (~uiDevice->disBuffer[i][j]);
+					break;
+				case XorCover:
+					uiDevice->disBuffer[i][j] ^= uiDevice->maskBuffer[i][j];
+					break;
+				case XnorCover:
+					uiDevice->disBuffer[i][j] ^= uiDevice->maskBuffer[i][j];
+					uiDevice->disBuffer[i][j] = (~uiDevice->disBuffer[i][j]);
+					break;
+			}
+		}
+	}
+}
+/**
+  *@ FunctionName: void PlotScreenMaskCover(CoverMode mode)
+  *@ Author: CzrTuringB
+  *@ Brief: 区域蒙版操作
+  *@ Time: Jan 10, 2025
+  *@ Requirement：
+  *@ 	1、根据矩形斜对角线坐标，进行蒙版覆盖
+  */
+void PlotAreaMaskCover(Point2D sp, Point2D ep, CoverMode mode)
+{
+	//检测边界
+	if(ep.x < sp.x || ep.y < sp.y) return;
+	//计算起始页和结束页索引
+	UiType sPage = sp.y / 8;
+	UiType sShift = sp.y % 8;
+	UiType ePage = ep.y / 8;
+	UiType eShift = ep.y % 8;
+	//处理边界页
+	for(UiType j = sp.x; j < ep.x; j++)
+	{
+		//处理边界页
+		UiType sTemp,eTemp;
+		sTemp = ~(0xFF << sShift);			//计算起始页保留位
+		sTemp &= uiDevice->disBuffer[sPage][j]; //保留边界外数据
+		eTemp = ~(0xFF >> (7-eShift));			//计算结束页保留位
+		eTemp &= uiDevice->disBuffer[ePage][j]; //保留边界外数据
+		switch(mode)
+		{
+			case AndCover:
+				uiDevice->disBuffer[sPage][j] &= uiDevice->maskBuffer[sPage][j];
+				uiDevice->disBuffer[ePage][j] &= uiDevice->maskBuffer[ePage][j];
+				uiDevice->disBuffer[sPage][j] &= (0xFF << sShift);
+				uiDevice->disBuffer[sPage][j] |= sTemp;
+				uiDevice->disBuffer[ePage][j] &= (0xFF >> (7-eShift));
+				uiDevice->disBuffer[ePage][j] |= eTemp;
+				break;
+			case OrCover:
+				uiDevice->disBuffer[sPage][j] |= uiDevice->maskBuffer[sPage][j];
+				uiDevice->disBuffer[ePage][j] |= uiDevice->maskBuffer[ePage][j];
+				uiDevice->disBuffer[sPage][j] &= (0xFF << sShift);
+				uiDevice->disBuffer[sPage][j] |= sTemp;
+				uiDevice->disBuffer[ePage][j] &= (0xFF >> (7-eShift));
+				uiDevice->disBuffer[ePage][j] |= eTemp;
+				break;
+			case NotCover:
+				uiDevice->disBuffer[sPage][j] = (~uiDevice->disBuffer[sPage][j]);
+				uiDevice->disBuffer[ePage][j] = (~uiDevice->disBuffer[ePage][j]);
+				uiDevice->disBuffer[sPage][j] &= (0xFF << sShift);
+				uiDevice->disBuffer[sPage][j] |= sTemp;
+				uiDevice->disBuffer[ePage][j] &= (0xFF >> (7-eShift));
+				uiDevice->disBuffer[ePage][j] |= eTemp;
+				break;
+			case XorCover:
+				uiDevice->disBuffer[sPage][j] ^= uiDevice->maskBuffer[sPage][j];
+				uiDevice->disBuffer[ePage][j] ^= uiDevice->maskBuffer[ePage][j];
+				uiDevice->disBuffer[sPage][j] &= (0xFF << sShift);
+				uiDevice->disBuffer[sPage][j] |= sTemp;
+				uiDevice->disBuffer[ePage][j] &= (0xFF >> (7-eShift));
+				uiDevice->disBuffer[ePage][j] |= eTemp;
+				break;
+			case XnorCover:
+				uiDevice->disBuffer[sPage][j] ^= uiDevice->maskBuffer[sPage][j];
+				uiDevice->disBuffer[sPage][j] = (~uiDevice->disBuffer[sPage][j]);
+				uiDevice->disBuffer[ePage][j] ^= uiDevice->maskBuffer[ePage][j];
+				uiDevice->disBuffer[ePage][j] = (~uiDevice->disBuffer[ePage][j]);
+				uiDevice->disBuffer[sPage][j] &= (0xFF << sShift);
+				uiDevice->disBuffer[sPage][j] |= sTemp;
+				uiDevice->disBuffer[ePage][j] &= (0xFF >> (7-eShift));
+				uiDevice->disBuffer[ePage][j] |= eTemp;
+				break;
+		}
+	}
+	//处理完整页
+	for(UiType i = sPage + 1; i < ePage; i++)
+	{
+		for(UiType j = sp.x; j < ep.x; j++)
+		{
+			switch(mode)
+			{
+				case AndCover:
+					uiDevice->disBuffer[i][j] &= uiDevice->maskBuffer[i][j];
+					break;
+				case OrCover:
+					uiDevice->disBuffer[i][j] |= uiDevice->maskBuffer[i][j];
+					break;
+				case NotCover:
+					uiDevice->disBuffer[i][j] = (~uiDevice->disBuffer[i][j]);
+					break;
+				case XorCover:
+					uiDevice->disBuffer[i][j] ^= uiDevice->maskBuffer[i][j];
+					break;
+				case XnorCover:
+					uiDevice->disBuffer[i][j] ^= uiDevice->maskBuffer[i][j];
+					uiDevice->disBuffer[i][j] = (~uiDevice->disBuffer[i][j]);
+					break;
+			}
+		}
+	}
 }

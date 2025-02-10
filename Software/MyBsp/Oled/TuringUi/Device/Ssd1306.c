@@ -4,75 +4,85 @@
   *@ Brief: IIC接口的SSD1306源文件
   *@ Time: Sep 20, 2024
   *@ Requirement：
+  *@ 	1、I2C1的PB6和PB7(因为OLED模块本身就带了上拉电阻了，所以选这个)
+  *@ 	2、I2C配置为快速模式，其余参数不需要更改(SSD1306支持快速模式)
+  *@ 	3、打开全局I2C的所有中断
+  *@ 	4、配置发送DMA，优先级为高、普通模式，数据宽度为字节长度
+  *@ Notes:
+  *@ 	1、首先此处的命令队列是我自己实现的，没有添加多线程保护
+  *@ 	2、在OledApp任务初始化时会向SSD1306发送命令
+  *@ 	3、在UiEvent任务中相关事件的处理会向SSD1306发送命令
+  *@ 	4、OledApp任务在UiEvent创建后就立马被删除了，所以不用加线程保护
   */
-/* Includes ------------------------------------------------------------------*/
+/* Includes" "------------------------------------------------------------------*/
 #include "Ssd1306.h"
+#include "Shell/Shell.h"
 #include "DataStructure/Queue.h"
-#include "BspState.h"
+/* Includes< >------------------------------------------------------------------*/
 /* Data(作用域为当前C文件)-----------------------------------------------------*/
 //-define
 #define	SSD1306I2cHandle hi2c1			//IIC接口
 #define SSD1306Address 0x78				//从机地址
 #define cmdBufferSize  30				//命令流数组元素个数
-//-variable
-static uint8_t cmdBuffer[cmdBufferSize]; //创建命令数组，用于存储SSD1306的命令流
-//-struct
-typedef struct
-{
-	SsdPublicConfig publicConfig;       			//公有部分
-	Queue cmdQueue;									//定义命令队列
-	uint8_t markBlock[16];							//缓冲块更新标记数组,一个字节有八位，每位1表示块更新，0表示块没更新
-	uint32_t lastCrc[8][16];        				//记录每个块的CRC校验码
-	SemaphoreHandle_t dmaIdle;						//DMA空闲判断
-}SsdConfigStruct;
-static SsdConfigStruct sUiDevice;						//静态结构体变量
-SsdPublicConfig* uiDevice = &sUiDevice.publicConfig;	//结构体共有部分指针变量
 //-enum
 typedef enum
 {
-	Data = 0x40,
-	Command = 0x00,
+	Data = 0x40,						//指明发送的是数据
+	Command = 0x00,						//指明发送的是命令
 }CommunicationMode;
 typedef enum
 {
-	DisplayOn = 0xAF,
-	DisplayOff = 0xAE,
+	DisplayOn = 0xAF,					//打开OLED显示
+	DisplayOff = 0xAE,					//关闭OLED显示
 }DisplayState;
 typedef enum
 {
-	HorizontalMode = 0,	//水平寻址
-	VerticalMode = 1,	//垂直寻址
-	PageMode = 2,		//页寻址
+	HorizontalMode = 0,					//水平寻址
+	VerticalMode = 1,					//垂直寻址
+	PageMode = 2,						//页寻址
 }AddressMode;
 typedef enum
 {
-	MapOrder = 0xA0,	//顺序映射
-	MapReverse = 0xA1,	//逆序映射
+	MapOrder = 0xA0,					//顺序映射
+	MapReverse = 0xA1,					//逆序映射
 }ColumnMap;
 typedef enum
 {
-	ScanOrder = 0xC0,	//顺序扫描
-	ScanReverse = 0xC8,	//逆序扫描
+	ScanOrder = 0xC0,					//顺序扫描
+	ScanReverse = 0xC8,					//逆序扫描
 }ComScan;
 typedef enum
 {
-	SnLR = 0x02,	//COM与引脚顺序映射
-	SLR	 = 0x22,	//COM与引脚顺序映射，芯片左右两边映射颠倒
-	AnLR = 0x12,	//COM与引脚自选映射
-	ALR	 = 0x32,	//COM与引脚自选映射，芯片左右两边映射颠倒
+	SnLR = 0x02,						//COM与引脚顺序映射
+	SLR	 = 0x22,						//COM与引脚顺序映射，芯片左右两边映射颠倒
+	AnLR = 0x12,						//COM与引脚自选映射
+	ALR	 = 0x32,						//COM与引脚自选映射，芯片左右两边映射颠倒
 }ComConfig;
-/* Functions ------------------------------------------------------------------*/
+//-struct
+typedef struct
+{
+	SsdPublicConfig publicConfig;       				//公有部分
+	Queue cmdQueue;										//定义命令队列
+	uint8_t markBlock[16];								//缓冲块更新标记数组,一个字节有八位，每位1表示块更新，0表示块没更新
+	uint32_t lastCrc[8][16];        					//记录每个块的CRC校验码
+	SemaphoreHandle_t dmaIdle;							//DMA空闲判断
+}SsdConfigStruct;
+//-variable
+static uint8_t cmdBuffer[cmdBufferSize]; 				//创建命令数组，用于存储SSD1306的命令流
+static SsdConfigStruct sUiDevice;						//静态结构体变量
+SsdPublicConfig* uiDevice = &sUiDevice.publicConfig;	//结构体共有部分指针变量
+/* Functions Declare------------------------------------------------------------------*/
 void SSDSetPageAddress(uint8_t pageStart,uint8_t pageEnd);
 void SSDSetColumnAddress(uint8_t columnStart,uint8_t columnEnd);
-/* Functions ------------------------------------------------------------------*/
+/* Functions Define------------------------------------------------------------------*/
 /**
   *@ FunctionName: void SSDWriteCmdByte(uint8_t cmd)
   *@ Author: CzrTuringB
   *@ Brief: 向SSD1306芯片中写入一个命令
-  *@ Time: Sep 20, 2024
+  *@ Time: Jan 13, 2025
   *@ Requirement：
-  *@ 	1、阻塞式传输
-  *@ 	2、尽量不要使用这个API
+  *@ Notes:
+  *@ 	1、阻塞式传输、在TuringUi中并不使用这个函数
   */
 void SSDWriteCmdByte(uint8_t cmd)
 {
@@ -81,11 +91,11 @@ void SSDWriteCmdByte(uint8_t cmd)
 /**
   *@ FunctionName: void SSDWriteDataByte(uint8_t data)
   *@ Author: CzrTuringB
-  *@ Brief: 向SSD1306芯片中写入一个字节数据
-  *@ Time: Sep 20, 2024
+  *@ Brief: 向SSD1306芯片中写入一个数据
+  *@ Time: Jan 13, 2025
   *@ Requirement：
-  *@ 	1、阻塞式传输
-  *@ 	2、尽量不要使用这个API
+  *@ Notes:
+  *@ 	1、阻塞式传输、在TuringUi中并不使用这个函数
   */
 void SSDWriteDataByte(uint8_t data)
 {
@@ -94,9 +104,11 @@ void SSDWriteDataByte(uint8_t data)
 /**
   *@ FunctionName: void SSDWriteCmds(void)
   *@ Author: CzrTuringB
-  *@ Brief: 使用DMA技术发送多个命令字节
-  *@ Time: Sep 20, 2024
+  *@ Brief: 将命令流队列中的命令传输给SSD1306
+  *@ Time: Jan 13, 2025
   *@ Requirement：
+  *@ Notes:
+  *@ 	1、DMA式传输
   */
 void SSDWriteCmds(void)
 {
@@ -109,9 +121,11 @@ void SSDWriteCmds(void)
 /**
   *@ FunctionName: void SSDBlockDetect(void)
   *@ Author: CzrTuringB
-  *@ Brief: 区域块数据变更检测
-  *@ Time: Dec 23, 2024
+  *@ Brief: SSD1306缓存块的CRC校验，通过对比两次校验码以确定需要传输的块
+  *@ Time: Jan 13, 2025
   *@ Requirement：
+  *@ 	1、需要开启硬件CRC
+  *@ Notes:
   */
 void SSDBlockDetect(void)
 {
@@ -124,7 +138,7 @@ void SSDBlockDetect(void)
             uint8_t* pBlockData = &uiDevice->disBuffer[row][col * 8]; // 获取块数据指针
 
             // 使用HAL_CRC_Calculate计算CRC
-            uint32_t currentCrc = HAL_CRC_Calculate(&hcrc, (uint32_t *)pBlockData, 2); // 计算CRC
+            uint32_t currentCrc = HAL_CRC_Calculate(&hcrc2, (uint32_t *)pBlockData, 2); // 计算CRC
             // 判断当前CRC是否和上次的CRC相同，如果不同则标记该块为已更新
             if (currentCrc != sUiDevice.lastCrc[row][col])
             {
@@ -132,18 +146,19 @@ void SSDBlockDetect(void)
                 rowMark |= (1 << col); // 在对应位置标记更新
             }
         }
-
-        // 将16位行标记写入对应的两个 `markBlock` 元素
-        sUiDevice.markBlock[row * 2] = (uint8_t)(rowMark & 0xFF);         // 低8位
+        //将16位行标记写入对应的两个 `markBlock` 元素
+        sUiDevice.markBlock[row * 2] = (uint8_t)(rowMark & 0xFF);         	 // 低8位
         sUiDevice.markBlock[row * 2 + 1] = (uint8_t)((rowMark >> 8) & 0xFF); // 高8位
     }
 }
 /**
   *@ FunctionName: void SSDWriteDataAll()
   *@ Author: CzrTuringB
-  *@ Brief: 使用DMA技术发送整个数据缓冲区
-  *@ Time: Sep 20, 2024
+  *@ Brief: 用DMA技术发送整个数据缓冲区
+  *@ Time: Jan 13, 2025
   *@ Requirement：
+  *@ Notes:
+  *@ 	1、DMA式传输
   */
 void SSDWriteDataAll(void)
 {
@@ -229,8 +244,9 @@ void SSDUpdateScreen(void)
   *@ FunctionName: void SSDPower(DisplayState cmd)
   *@ Author: CzrTuringB
   *@ Brief: 打开\关闭Oled的显示
-  *@ Time: Sep 20, 2024
+  *@ Time: Jan 13, 2025
   *@ Requirement：
+  *@ Notes:
   */
 void SSDPower(DisplayState cmd)
 {
@@ -240,8 +256,9 @@ void SSDPower(DisplayState cmd)
   *@ FunctionName: void SSDClean(void)
   *@ Author: CzrTuringB
   *@ Brief: 清空OLED的显示
-  *@ Time: Sep 20, 2024
+  *@ Time: Jan 13, 2025
   *@ Requirement：
+  *@ Notes:
   */
 void SSDClean(void)
 {
@@ -265,9 +282,10 @@ void SSDClean(void)
 /**
   *@ FunctionName: void SSDClkConfig(uint8_t divide,uint8_t fosc)
   *@ Author: CzrTuringB
-  *@ Brief:	配置SSD1306芯片的时钟
-  *@ Time: Sep 20, 2024
+  *@ Brief: 配置SSD1306芯片的时钟
+  *@ Time: Jan 13, 2025
   *@ Requirement：
+  *@ Notes:
   *@ 	1、设置时钟分频系数Divide，其范围是：0xX0~0xXF
   *@ 	2、设置时钟频率Fosc，其范围是：0x0X~0xFX
   *@ 	3、一般只有在初始化的时候调用这个函数，并且其配置为：Divide=0x00,Fosc=0x80
@@ -282,9 +300,10 @@ void SSDClkConfig(uint8_t divide,uint8_t fosc)
 /**
   *@ FunctionName: void SSDSetMux(uint8_t mux)
   *@ Author: CzrTuringB
-  *@ Brief:	设置显示映射到显存的范围,即有显存中有多少行数据映射到显示器上
-  *@ Time: Sep 20, 2024
+  *@ Brief: 设置显示映射到显存的范围,即有显存中有多少行数据映射到显示器上
+  *@ Time: Jan 13, 2025
   *@ Requirement：
+  *@ Notes:
   *@ 	1、设置显示范围Mux，其范围是：0x00~0x3F
   *@ 	2、显示范围对应的是RAM行，设置后RAM行范围：0~Mux
   */
@@ -297,9 +316,10 @@ void SSDSetMux(uint8_t mux)
 /**
   *@ FunctionName: SSDSetOffset(uint8_t offset)
   *@ Author: CzrTuringB
-  *@ Brief:	设置显示的哪个行是起始行
-  *@ Time: Sep 20, 2024
+  *@ Brief: 设置显示的哪个行是起始行
+  *@ Time: Jan 13, 2025
   *@ Requirement：
+  *@ Notes:
   *@ 	1、偏移量Offset，其范围是：0x00~0x3F
   *@ 	2、偏移量指的是COM0对应的那个Offset显示行
   */
@@ -313,8 +333,9 @@ void SSDSetOffset(uint8_t offset)
   *@ FunctionName: void SSDSetStartline(uint8_t startline)
   *@ Author: CzrTuringB
   *@ Brief: 设置显示的起始行对应显存中的第几行
-  *@ Time: Sep 20, 2024
+  *@ Time: Jan 13, 2025
   *@ Requirement：
+  *@ Notes:
   *@ 	1、起始行Startline，其范围是0x40~0x7F
   *@ 	2、显示起始线指的是Row0对应的那个RamRow
   */
@@ -325,9 +346,10 @@ void SSDSetStartline(uint8_t startline)
 /**
   *@ FunctionName: void SSDColConfig(ColumnMap mode)
   *@ Author: CzrTuringB
-  *@ Brief:	设置列Cloumn与段Segment的映射模式
-  *@ Time: Sep 20, 2024
+  *@ Brief: 设置列Cloumn与段Segment的映射模式
+  *@ Time: Jan 13, 2025
   *@ Requirement：
+  *@ Notes:
   *@ 	1、设置显示列与显存列的对应情况
   *@ 	2、顺序：显示列0对应显存列0
   *@ 	3、逆序：显示列0对应显存列127
@@ -340,8 +362,9 @@ void SSDColConfig(ColumnMap mode)
   *@ FunctionName: void SSDComScan(ComScan mode)
   *@ Author: CzrTuringB
   *@ Brief: 设置COM的扫描方式
-  *@ Time: Sep 20, 2024
+  *@ Time: Jan 13, 2025
   *@ Requirement：
+  *@ Notes:
   */
 void SSDComScan(ComScan mode)
 {
@@ -351,8 +374,9 @@ void SSDComScan(ComScan mode)
   *@ FunctionName: void SSDComConfig(ComConfig mode)
   *@ Author: CzrTuringB
   *@ Brief: SSD的COM与引脚的映射配置
-  *@ Time: Sep 20, 2024
+  *@ Time: Jan 13, 2025
   *@ Requirement：
+  *@ Notes:
   */
 void SSDComConfig(ComConfig mode)
 {
@@ -366,7 +390,9 @@ void SSDComConfig(ComConfig mode)
   *@ Brief:	设置显示对比度
   *@ Time: Sep 20, 2024
   *@ Requirement：
+  *@ Notes:
   *@ 	1、设置对比度contrast，其范围是：0x00~0xff
+  *@
   */
 void SSDSetContrast(uint8_t contrast)
 {
@@ -380,6 +406,7 @@ void SSDSetContrast(uint8_t contrast)
   *@ Brief:	配置SSD提前充电周期
   *@ Time: Sep 20, 2024
   *@ Requirement：
+  *@ Notes:
   *@ 	1、Phase1：表示阶段1的充电周期，其范围是0xX0~0xXF
   *@ 	2、Phase2：表示阶段2的充电周期，其范围是0x0X~0XFX
   */
@@ -396,6 +423,7 @@ void SSDPreChargeConfig(uint8_t phase1,uint8_t phase2)
   *@ Brief: 配置Comh引脚取消选择电压等级
   *@ Time: Sep 20, 2024
   *@ Requirement：
+  *@ Notes:
   *@ 	1、等级：0x00 0x20 0x30
   */
 void SSDComhConfig(uint8_t level)
@@ -410,6 +438,7 @@ void SSDComhConfig(uint8_t level)
   *@ Brief: 设置屏幕显示是否保持不变
   *@ Time: Sep 20, 2024
   *@ Requirement：
+  *@ Notes:
   *@ 	1、输入：Enale or Disable
   */
 void SSDSetHold(EnDis holdOn)
@@ -434,6 +463,7 @@ void SSDSetHold(EnDis holdOn)
   *@ Brief: 设置屏幕翻转显示
   *@ Time: Sep 20, 2024
   *@ Requirement：
+  *@ Notes:
   *@ 	1、输入：Enale or Disable
   */
 void SSDSetReverse(EnDis reverse)
@@ -459,6 +489,7 @@ void SSDSetReverse(EnDis reverse)
   *@ Brief:	使能充电调节
   *@ Time: Sep 20, 2024
   *@ Requirement：
+  *@ Notes:
   */
 void SSDChargePump(void)
 {
@@ -473,6 +504,7 @@ void SSDChargePump(void)
   *@ Brief: 配置寻址模式
   *@ Time: Sep 20, 2024
   *@ Requirement：
+  *@ Notes:
   *@ 	1、除非特别设置，默认都为水平寻址模式
   */
 void SSDAddressConfig(AddressMode mode)
@@ -487,6 +519,7 @@ void SSDAddressConfig(AddressMode mode)
   *@ Brief:	设置起始列地址和终止列地址
   *@ Time: Sep 20, 2024
   *@ Requirement：
+  *@ Notes:
   *@ 	1、数据范围：0~127
   *@ 	2、适用于非页寻址模式
   */
@@ -505,6 +538,7 @@ void SSDSetColumnAddress(uint8_t columnStart,uint8_t columnEnd)
   *@ Brief:	设置起始页地址和终止页地址
   *@ Time: Sep 20, 2024
   *@ Requirement：
+  *@ Notes:
   *@ 	1、数据范围：0~7
   *@ 	2、适用于非页寻址模式
   */
@@ -523,6 +557,7 @@ void SSDSetPageAddress(uint8_t pageStart,uint8_t pageEnd)
   *@ Brief: IIC+DMA发送完成后产生的回调函数
   *@ Time: Sep 20, 2024
   *@ Requirement：
+  *@ Notes:
   */
 void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
@@ -538,6 +573,7 @@ void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c)
   *@ Brief: 屏幕刷新函数
   *@ Time: Dec 23, 2024
   *@ Requirement：
+  *@ Notes:
   */
 void SSDInit(void)
 {

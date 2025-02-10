@@ -11,7 +11,7 @@
 #include "DataStructure/nTree.h"
 #include "../Basic/UiCore.h"
 /* Data ------------------------------------------------------------------*/
-extern pTreeNode rootNode;
+extern pnTreeNode rootNode;
 /* Functions------------------------------------------------------------------*/
 void MenuTreeInit(void);
 #endif

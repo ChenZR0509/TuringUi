@@ -9,6 +9,8 @@
 #define UIROOTPAGE_H_
 /* Includes ------------------------------------------------------------------*/
 #include "../Basic/UiCore.h"
+#include "../Widget/UiNumberBox.h"
+#include "../Widget/UiCheckBox.h"
 /* Data(对外接口)-----------------------------------------------------*/
 /* Functions------------------------------------------------------------------*/
 void RootPageInit(void* data, void* params);

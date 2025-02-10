@@ -1,13 +1,13 @@
 /**
-  *@ FileName：UiInit.h
+  *@ FileName：UiRender.h
   *@ Author：CzrTuringB
-  *@ Brief：
+  *@ Brief：Ui渲染
   *@ Time：Jan 15, 2025
   *@ Requirement：
   *@ Notes：
   */
-#ifndef __UIINIT_H
-#define __UIINIT_H
+#ifndef __UIRENDER_H
+#define __UIRENDER_H
 /* Includes" "------------------------------------------------------------------*/
 #include "../Basic/UiCore.h"
 /* Includes< >------------------------------------------------------------------*/
@@ -19,5 +19,5 @@
 //-struct
 //-variable
 /* Functions Declare(对外接口函数)------------------------------------------------------------------*/
-BspState UiInit(void);
+void UiRenderHandle(void);
 #endif

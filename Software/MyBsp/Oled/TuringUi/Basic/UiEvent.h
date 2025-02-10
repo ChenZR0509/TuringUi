@@ -1,15 +1,15 @@
 /**
-  *@ FileName：UiInit.h
+  *@ FileName：UiEvent.h
   *@ Author：CzrTuringB
-  *@ Brief：
+  *@ Brief：Ui事件管理器
   *@ Time：Jan 15, 2025
   *@ Requirement：
   *@ Notes：
   */
-#ifndef __UIINIT_H
-#define __UIINIT_H
+#ifndef __UIEVENT_H
+#define __UIEVENT_H
 /* Includes" "------------------------------------------------------------------*/
-#include "../Basic/UiCore.h"
+#include "UiCore.h"
 /* Includes< >------------------------------------------------------------------*/
 /* Functions------------------------------------------------------------------*/
 /* Data(对外接口)-----------------------------------------------------*/
@@ -19,5 +19,6 @@
 //-struct
 //-variable
 /* Functions Declare(对外接口函数)------------------------------------------------------------------*/
-BspState UiInit(void);
+BspState PostUiEvent(pUiEvent event);
+void UiEventHandle(void);
 #endif

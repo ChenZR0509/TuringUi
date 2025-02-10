@@ -349,7 +349,7 @@ void PlotCylinder(Cylinder* cyl, SSDBuffer buffer, FillMode mode, Plot3Mode pMod
 		if(cyl->vertices[1].p2.y == cyl->vertices[3].p2.y)
 		{
 			Point2D p[4] = {cyl->vertices[0].p2,cyl->vertices[2].p2,cyl->vertices[6].p2,cyl->vertices[4].p2};
-			PlotQuadrilateral(p, buffer, Fill1);
+			PlotQuadrilateral(p, buffer, FillF);
 			return;
 		}
 	}
@@ -457,7 +457,7 @@ void PlotCone(Cone* con, SSDBuffer buffer, FillMode mode, Plot3Mode pMode)
 		if(con->vertices[1].p2.y == con->vertices[3].p2.y)
 		{
 			Point2D p[3] = {con->vertices[0].p2,con->vertices[2].p2,con->vertices[4].p2};
-			PlotTriangle(p, buffer, Fill1);
+			PlotTriangle(p, buffer, FillF);
 			return;
 		}
 	}

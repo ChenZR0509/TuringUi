@@ -1,16 +1,24 @@
 /**
-  *@ FileName: UiCore.c
-  *@ Author: CzrTuringB
-  *@ Brief:
-  *@ Time: Oct 30, 2024
+  *@ FileName：UiCore.c
+  *@ Author：CzrTuringB
+  *@ Brief：TuringUi的内核实现
+  *@ Time：Jan 15, 2025
   *@ Requirement：
+  *@ Notes：
   */
-/* Includes ------------------------------------------------------------------*/
+/* Includes" "------------------------------------------------------------------*/
 #include "UiCore.h"
 #include "rng.h"
-/* Data ------------------------------------------------------------------*/
-UiPage* uiPage;
-/* Functions ------------------------------------------------------------------*/
+#include "string.h"
+/* Includes< >------------------------------------------------------------------*/
+/* Data(作用域为当前C文件)-----------------------------------------------------*/
+//-define
+//-enum
+//-struct
+//-variable
+pUiPage uiPage;				//ui页面(全局变量)指向程序运行期间当前时刻渲染的页面指针
+/* Functions Declare------------------------------------------------------------------*/
+/* Functions Define------------------------------------------------------------------*/
 //-随机数的生成
 /**
   *@ FunctionName: uint32_t UiGetRandom(uint32_t min, uint32_t max)
@@ -18,132 +26,226 @@ UiPage* uiPage;
   *@ Brief: 在指定范围内生成随机数
   *@ Time: Jan 2, 2025
   *@ Requirement：
+  *@ Notes：
   */
 uint32_t UiGetRandom(uint32_t min, uint32_t max)
 {
+	//1、检查形参有效性
     if (min > max)  return 0;
     uint32_t randomValue;
-    // 获取随机数
-    if (HAL_RNG_GenerateRandomNumber(&hrng, &randomValue) != HAL_OK) return 0;
-    // 映射到 [min, max] 范围
+    //2、获取随机数
+    if (HAL_RNG_GenerateRandomNumber(&hrng2, &randomValue) != HAL_OK) return 0;
+    //3、映射到 [min, max] 范围
     return (randomValue % (max - min + 1)) + min;
 }
-//-Ui元素的实现
+//-Ui元素
 /**
-  *@ FunctionName: void UiElementInit(UiElement ele, void (*render)(void*), void (*handle)(void*, void*))
+  *@ FunctionName: pUiElement UiElementCreate(void)
+  *@ Author: CzrTuringB
+  *@ Brief: 创建一个UI元素
+  *@ Time: Jan 9, 2025
+  *@ Requirement：
+  *@ Notes：
+  */
+pUiElement UiElementCreate(void)
+{
+	//1、动态创建一个Ui元素
+	UiElement* ele = pvPortMalloc(sizeof(UiElement));
+	if(ele == NULL)	return NULL;
+	memset(ele, 0, sizeof(UiElement));
+	return ele;
+}
+/**
+  *@ FunctionName: BspState UiElementInit(pUiElement ele, void* widget, void (*render)(UiElement*), void (*handle)(UiElement*, void*), void (*destory)(pUiElement))
   *@ Author: CzrTuringB
   *@ Brief: 初始化UI元素
   *@ Time: Jan 2, 2025
   *@ Requirement：
-  *@ 	1、render即为UI元素渲染函数的指针
-  *@ 	2、handle即为UI元素事件处理函数的指针
+  *@ Notes：
+  *@ 	1、ele即为Ui元素指针
+  *@ 	2、widget即为此Ui元素对应的Ui部件的指针
+  *@ 	3、render即为Ui元素对应的Ui部件渲染函数的指针
+  *@ 	4、handle即为Ui元素对应的Ui部件事件处理函数的指针
+  *@ 	5、destory即为Ui元素对应的Ui部件析构函数的指针
   */
-void UiElementInit(UiElement ele, void (*render)(void*), void (*handle)(void*, void*))
+BspState UiElementInit(pUiElement ele, void* widget, void (*render)(UiElement*), void (*handle)(UiElement*, void*), void (*destory)(pUiElement))
 {
-	ele.isRender = True;
-	ele.render = render;
-	//ele.handleEvent = handle;
-}
-//-Ui页面的实现
-/**
-  *@ FunctionName: UiPage* UiPageCreate(void)
-  *@ Author: CzrTuringB
-  *@ Brief: 动态创建一个UI页面
-  *@ Time: Jan 2, 2025
-  *@ Requirement：
-  */
-UiPage* UiPageCreate(void)
-{
-    //动态分配 UiPage 内存
-    UiPage* page = pvPortMalloc(sizeof(UiPage));
-    if (page == NULL)
-    {
-        //如果分配失败，返回 NULL
-        return NULL;
-    }
-    //返回创建的UI页面指针
-    return page;
+	//1、检查参数有效性
+	if(!ele || !widget || !render || !handle || !destory) return BspError;
+	//2、配置Ui元素参数
+	ele->widget = widget;
+	ele->isHandle = True;
+	ele->render = render;
+	ele->handleEvent = handle;
+	ele->destory = destory;
+	ele->isAniFinish = NULL;
+	ele->animation = NULL;
+	//3、返回状态信息
+	return BspOk;
 }
 /**
-  *@ FunctionName: void UiPageInit(UiPage* page, UiElement** elements, uint8_t count, pTreeNode node)
-  *@ Author: CzrTuringB
-  *@ Brief: 初始化UI页面
-  *@ Time: Jan 2, 2025
-  *@ Requirement：
-  *@ 	1、elements即为ui元素指针数组
-  *@ 	2、count即为页面包含的ui元素的个数
-  *@ 	3、node即为页面所在菜单索引树的节点
-  */
-void UiPageInit(UiPage* page, UiElement** elements, uint8_t count, pTreeNode node)
-{
-    page->elements = elements;  	// 设置传入的元素数组
-    page->eleCount = count;     	// 设置当前元素数量
-    page->index = 0;				// 下一级页面的索引
-    page->base = node;
-}
-/**
-  *@ FunctionName: void UiPageDestroy(UiPage* page)
+  *@ FunctionName: void UiElementDestroy(pUiElement ele)
   *@ Author: CzrTuringB
   *@ Brief: 销毁UI页面
   *@ Time: Jan 2, 2025
   *@ Requirement：
+  *@ Notes:
   */
-void UiPageDestroy(UiPage* page)
+void UiElementDestroy(pUiElement ele)
 {
-    if (page != NULL)
+    if (!ele) vPortFree(ele);
+}
+//-Ui页面的实现
+/**
+  *@ FunctionName: pUiPage UiPageCreate(void)
+  *@ Author: CzrTuringB
+  *@ Brief: 动态创建一个UI页面
+  *@ Time: Jan 2, 2025
+  *@ Requirement：
+  *@ Notes:
+  */
+pUiPage UiPageCreate(void)
+{
+    //1、动态分配 UiPage 内存
+    UiPage* page = pvPortMalloc(sizeof(UiPage));
+    if (page == NULL) return NULL;
+    memset(page,0,sizeof(UiPage));
+    return page;
+}
+/**
+  *@ FunctionName: BspState UiPageInit(pUiPage page, uint8_t count, pnTreeNode node, void (*handleEvent)(pUiEvent))
+  *@ Author: CzrTuringB
+  *@ Brief: 初始化UI页面
+  *@ Time: Jan 2, 2025
+  *@ Requirement：
+  *@ Notes:
+  *@ 	1、page即为Ui页面指针，在图灵Ui中只能传入uiPage
+  *@ 	2、count即为当前页面包含的Ui元素数
+  *@ 	3、node即为当前页面在菜单索引树的节点指针
+  *@ 	4、handleEvent即为当前页面的事件处理函数(每个不同的页面具有不同的事件处理函数)
+  */
+BspState UiPageInit(pUiPage page, uint8_t count, pnTreeNode node, void (*handleEvent)(pUiEvent))
+{
+	//1、检查参数有效性
+	if(!page || !handleEvent) return BspError;
+	//2、配置Ui页面属性
+    page->eleCount = count;
+    page->index = 0;
+    page->base = node;
+    page->handleEvent = handleEvent;
+    //2、创建Ui页面元素队列
+    page->elements = xQueueCreate(count,sizeof(UiElement*));
+    if(!page->elements) return BspError;
+    //3、创建Ui页面动画链表及其锁
+    page->elesAniMutex = xSemaphoreCreateMutex();
+    if(!page->elesAniMutex) return BspError;
+    page->elesAnimation = ListCreate();
+    if(!page->elesAnimation) return BspError;
+    //创建一块内存用于存储后续需要渲染处理的元素
+    page->elesRender = xQueueCreate(count,sizeof(UiElement*));
+    if(!page->elements) return BspError;
+    return BspOk;
+}
+/**
+  *@ FunctionName: void UiPageDestroy(pUiPage page)
+  *@ Author: CzrTuringB
+  *@ Brief: 销毁UI页面
+  *@ Time: Jan 2, 2025
+  *@ Requirement：
+  *@ Notes:
+  */
+void UiPageDestroy(pUiPage page)
+{
+    if (!page)
     {
-        //释放元素数组的内存
-        if (page->elements != NULL)
-        {
-            vPortFree(page->elements);
-        }
-        //释放UiPage自身的内存
+    	if(!page->elements) vQueueDelete(page->elements);
+    	if(!page->elesRender) vQueueDelete(page->elesRender);
+    	if(!page->elesAnimation) ListDestroy(page->elesAnimation);
+    	if(!page->elesAniMutex) vSemaphoreDelete(page->elesAniMutex);
         vPortFree(page);
     }
 }
 /**
-  *@ FunctionName: void UiPageRender(UiPage* page)
+  *@ FunctionName: BspState UiPageAddElements(pUiElement* ele)
   *@ Author: CzrTuringB
-  *@ Brief: 页面渲染器
-  *@ Time: Jan 2, 2025
+  *@ Brief: 向Ui页面中添加Ui元素
+  *@ Time: Jan 15, 2025
   *@ Requirement：
+  *@ Notes:
   */
-void UiPageRender(UiPage* page)
+BspState UiPageAddElements(pUiElement* ele)
 {
-	//遍历页面上的每个UI元素并执行渲染工作
-    for (uint8_t i = 0; i < page->eleCount; i++)
-    {
-    	if(page->elements[i]->isRender == True)
-    	{
-    		page->elements[i]->render(page->elements[i]);
-    	}
-    }
+	BaseType_t result = xQueueSend(uiPage->elements,ele,portMAX_DELAY);
+	return result == pdPASS ? BspOk : BspError;
 }
 /**
-  *@ FunctionName: void UiPageEventHandle(UiPage* page, uint8_t event)
+  *@ FunctionName: BspState UiRenderAddElements(pUiElement* ele)
   *@ Author: CzrTuringB
-  *@ Brief: 页面事件处理器
-  *@ Time: Jan 2, 2025
+  *@ Brief: 向Ui渲染队列中添加Ui元素
+  *@ Time: Jan 15, 2025
   *@ Requirement：
+  *@ Notes:
   */
-void UiPageEventHandle(UiPage* page, uint8_t event)
+BspState UiRenderAddElements(pUiElement* ele)
 {
-	//遍历页面上的每个UI元素并执行相关事件动作
-	for (uint8_t i = 0; i < page->eleCount; i++)
-    {
-        page->elements[i]->handleEvent(page->elements[i], event);
-    }
+	BaseType_t result = xQueueSend(uiPage->elesRender,ele,portMAX_DELAY);
+	return result == pdPASS ? BspOk : BspError;
 }
 /**
-  *@ FunctionName: pTreeNode UiPageEnter(UiPage* page)
+  *@ FunctionName: uint8_t GetUiRenderEleCounts(void)
+  *@ Author: CzrTuringB
+  *@ Brief: 读取Ui渲染队列中的元素个数
+  *@ Time: Jan 15, 2025
+  *@ Requirement：
+  *@ Notes:
+  */
+uint8_t GetUiRenderEleCounts(void)
+{
+	uint8_t count = uxQueueMessagesWaiting(uiPage->elesRender);
+	return count;
+}
+/**
+  *@ FunctionName: BaseType_t result = xQueueReceive(uiPage->elesRender, ele, portMAX_DELAY);
+  *@ Author: CzrTuringB
+  *@ Brief: 从Ui渲染队列中取出一个Ui元素
+  *@ Time: Jan 15, 2025
+  *@ Requirement：
+  *@ Notes:
+  */
+BspState UiRenderTakeElements(pUiElement* ele)
+{
+	BaseType_t result = xQueueReceive(uiPage->elesRender, ele, portMAX_DELAY);
+	return result == pdPASS ? BspOk : BspError;
+}
+/**
+  *@ FunctionName: BspState UiAnimationAddElements(pUiElement* ele)
+  *@ Author: CzrTuringB
+  *@ Brief: 向Ui动画链表中添加Ui元素
+  *@ Time: Jan 15, 2025
+  *@ Requirement：
+  *@ Notes:
+  */
+BspState UiAnimationAddElements(pUiElement* ele)
+{
+	//1、创建一个链表节点
+	pListNode node = ListNodeCreate(ele, sizeof(pUiElement), NULL);
+	if(node == NULL)	return BspError;
+	//2、在链表头节点插入
+	BspState result = ListInsert(uiPage->elesAnimation, node, NULL);
+	//3、返回状态
+	return result;
+}
+/**
+  *@ FunctionName: pnTreeNode UiPageEnter(UiPage* page)
   *@ Author: CzrTuringB
   *@ Brief: 进入下一级页面
   *@ Time: Jan 2, 2025
   *@ Requirement：
+  *@ Notes:
   */
-pTreeNode UiPageEnter(UiPage* page)
+pnTreeNode UiPageEnter(pUiPage page)
 {
-	pTreeNode node;
+	pnTreeNode node;
 	if(page->base->children == NULL)	return NULL;
 	node = page->base->children[page->index];
 	UiPageDestroy(page);
@@ -156,11 +258,12 @@ pTreeNode UiPageEnter(UiPage* page)
   *@ Time: Jan 2, 2025
   *@ Requirement：
   */
-pTreeNode UiPageQuit(UiPage* page)
+pnTreeNode UiPageQuit(pUiPage page)
 {
-	pTreeNode node;
+	pnTreeNode node;
 	if(page->base->parent == NULL)	return NULL;
 	node = page->base->parent;
 	UiPageDestroy(page);
 	return node;
 }
+/* Functions ------------------------------------------------------------------*/

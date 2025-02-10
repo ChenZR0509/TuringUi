@@ -1,42 +1,48 @@
 /**
   *@ FileName: Button.h
   *@ Author: CzrTuringB
-  *@ Brief: 开发板上Button的板级支持包
-  *@ Time: Sep 18, 2024
+  *@ Brief: 按键
+  *@ Time: Jan 13, 2025
   *@ Requirement：
-  *@ 	1、根据原理图配置Button的端口引脚
-  *@ 	2、根据原理图配置Button的按下与否对应的输入电平
+  *@ Notes:
   */
 #ifndef __BUTTON_H
 #define __BUTTON_H
-/* Includes ------------------------------------------------------------------*/
+/* Includes" "------------------------------------------------------------------*/
+#include <BspCore.h>
 #include "gpio.h"
-/* Data ------------------------------------------------------------------*/
-//Button的端口引脚
-#define ButtonPort GPIOA
-#define ButtonPin  GPIO_PIN_0
-//Button按下与否对应的引脚输入电平
-#define ButtonPress GPIO_PIN_SET
-#define ButtonIdle GPIO_PIN_RESET
-//Button的状态
- typedef enum
- {
-    IDLE,   //空闲
-    PRESS_DETECTED,  //按键按下
-    RELEASE_DETECTED, //按键释放
-    SHORT_PRESS,     //短按
-    LONG_PRESS,     //长按
-	LONG_PRESS_END, //长按结束
-	DOUBLE_PRESS,    //双击
-	WAIT,	//等待
- }ButtonState;
+/* Includes< >------------------------------------------------------------------*/
 /* Functions------------------------------------------------------------------*/
-/**
-  *@ FunctionName:
-  *@ Author: CzrTuringB
-  *@ Brief:
-  *@ Time: Sep 18, 2024
-  *@ Requirement：
-  */
-GPIO_PinState ButtonRead(GPIO_TypeDef* GPIOx,uint16_t GPIO_Pin);
+/* Data(对外接口)-----------------------------------------------------*/
+//-define
+#define ButtonCount 2										//按键数量(移植更改项)
+//-enum
+typedef enum
+{
+    Click,
+	DoubleClick,
+	LongClick,
+}ButtonHandleType;											//按键事件类型
+//-typedef(类型重命名)
+typedef void (*ButtonClick)(void);
+typedef void (*ButtonDoubleClick)(void);
+typedef void (*ButtonLongClick)(void);
+//-struct
+typedef struct
+{
+	ButtonClick ClickHandle;  	 							//单击处理函数
+	ButtonDoubleClick DoubleClickHandle;  	 				//双击处理函数
+	ButtonLongClick LongClickHandle;  	 					//长按处理函数
+}ButtonHandle;
+typedef struct
+{
+	uint8_t	id;												//指明按键
+	ButtonHandleType type;									//替换类型
+	void* functionPointer;									//处理函数指针
+}ButtonDispatch;
+//-variable
+extern xQueueHandle buttonQueue;
+extern xTaskHandle ButtonTaskHandle;
+/* Functions Declare(对外接口函数)------------------------------------------------------------------*/
+void ButtonApp(void);
 #endif

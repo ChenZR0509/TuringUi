@@ -1,16 +1,24 @@
 /**
-  *@ FileName: UiNavigation.c
-  *@ Author: CzrTuringB
-  *@ Brief:
-  *@ Time: Oct 30, 2024
+  *@ FileName：UiNavigation.c
+  *@ Author：CzrTuringB
+  *@ Brief：Ui菜单树
+  *@ Time：Jan 15, 2025
   *@ Requirement：
+  *@ Notes：
   */
-/* Includes ------------------------------------------------------------------*/
+/* Includes" "------------------------------------------------------------------*/
 #include "UiNavigation.h"
-#include "UiRootPage.h"
-/* Data ------------------------------------------------------------------*/
-pTreeNode rootNode;
-/* Functions ------------------------------------------------------------------*/
+//-Ui页面
+//#include "UiRootPage.h"
+/* Includes< >------------------------------------------------------------------*/
+/* Data(作用域为当前C文件)-----------------------------------------------------*/
+//-define
+//-enum
+//-struct
+//-variable
+pnTreeNode rootNode;
+/* Functions Declare------------------------------------------------------------------*/
+/* Functions Define------------------------------------------------------------------*/
 /**
   *@ FunctionName: void MenuTreeInit(void)
   *@ Author: CzrTuringB
@@ -23,10 +31,11 @@ pTreeNode rootNode;
 void MenuTreeInit(void)
 {
 	//根页面节点的创建
-	rootNode = CreateNode("rootPage", sizeof("rootPage"), RootPageInit);
+	//rootNode = NTreeNodeCreate("root", sizeof("root"), RootPageInit);
 	//向跟页面添加子节点
 //	for(uint8_t i=0; i<rootPage->num; i++)
 //	{
 //		AddChild(rootPage, menu1[i]);
 //	}
 }
+
